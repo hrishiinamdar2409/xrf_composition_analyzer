@@ -1,0 +1,16 @@
+{
+  "name": "goldscope-dashboard",
+  "version": "1.0.0",
+  "description": "Fischer GOLDSCOPE SD — Gold Testing Dashboard & Reporting System",
+  "main": "backend/index.js",
+  "scripts": {
+    "start": "node backend/index.js",
+    "dev": "node --watch backend/index.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "chokidar": "^3.6.0",
+    "express": "^4.22.2",
+    "ws": "^8.20.1"
+  }
+}

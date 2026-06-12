@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+	 GOLDSCOPE — ENTERPRISE LIGHT THEME
+	 Pure CSS overrides — no layout or JSX changes.
+	 Header uses hardcoded hex in App.jsx and is immune here.
+	 ============================================================ */
+
+/* ── Page background ───────────────────────────────────────── */
+.bg-slate-900 { background-color: #f0f2f5 !important; }
+
+/* ── Card / Panel surfaces ─────────────────────────────────── */
+.bg-slate-800 { background-color: #ffffff !important; }
+
+/* ── Input & secondary backgrounds ────────────────────────── */
+.bg-slate-700 { background-color: #f8fafc !important; }
+.bg-slate-600 { background-color: #f1f5f9 !important; }
+
+/* ── Hover backgrounds ─────────────────────────────────────── */
+.hover\:bg-slate-700:hover     { background-color: #f1f5f9 !important; }
+.hover\:bg-slate-600:hover     { background-color: #e8ecf2 !important; }
+.hover\:bg-slate-700\/50:hover { background-color: rgba(241,245,249,0.9) !important; }
+
+/* ── Borders ───────────────────────────────────────────────── */
+.border-slate-700 { border-color: #e2e8f0 !important; }
+.border-slate-600 { border-color: #cbd5e1 !important; }
+.border-slate-500 { border-color: #94a3b8 !important; }
+
+/* ── Table row dividers ────────────────────────────────────── */
+.divide-slate-700 > :not([hidden]) ~ :not([hidden]) {
+	border-color: #f1f5f9 !important;
+}
+
+/* ── Text ──────────────────────────────────────────────────── */
+.text-slate-100 { color: #1e293b !important; }
+.text-slate-200 { color: #334155 !important; }
+.text-slate-300 { color: #475569 !important; }
+.text-slate-400 { color: #94a3b8 !important; }
+.text-slate-500 { color: #94a3b8 !important; }
+.text-slate-600 { color: #94a3b8 !important; }
+
+/* ── Placeholders ──────────────────────────────────────────── */
+.placeholder-slate-400::placeholder { color: #94a3b8 !important; }
+
+/* ── Disabled / read-only inputs ───────────────────────────── */
+input:read-only,
+input:disabled,
+select:disabled,
+textarea:disabled {
+	background-color: #f1f5f9 !important;
+	color: #94a3b8 !important;
+}
+
+/* ── Accent: amber → institutional blue ────────────────────── */
+.bg-amber-500                  { background-color: #1d4ed8 !important; }
+.bg-amber-400                  { background-color: #2563eb !important; }
+.hover\:bg-amber-400:hover     { background-color: #2563eb !important; }
+.hover\:bg-amber-500:hover     { background-color: #1e40af !important; }
+.border-amber-500              { border-color: #1d4ed8 !important; }
+.border-amber-400              { border-color: #2563eb !important; }
+.border-l-amber-500            { border-left-color: #1d4ed8 !important; }
+.text-amber-400                { color: #1d4ed8 !important; }
+.text-amber-300                { color: #2563eb !important; }
+.text-amber-500                { color: #1e40af !important; }
+.hover\:border-amber-500:hover { border-color: #1d4ed8 !important; }
+.focus\:ring-amber-500:focus   { --tw-ring-color: rgba(29,78,216,0.3) !important; }
+.focus\:ring-amber-400:focus   { --tw-ring-color: rgba(37,99,235,0.3) !important; }
+.accent-amber-500              { accent-color: #1d4ed8 !important; }
+
+/* ── Primary element box (amber tint → blue tint) ──────────── */
+.bg-amber-900\/40 { background-color: #eff6ff !important; }
+.bg-amber-900\/30 { background-color: #f0f9ff !important; }
+
+/* ── Gold custom Tailwind colors → blue ────────────────────── */
+.text-gold-700               { color: #1d4ed8 !important; }
+.text-gold-800               { color: #1e3a8a !important; }
+.bg-gold-50                  { background-color: #eff6ff !important; }
+.bg-gold-500                 { background-color: #1d4ed8 !important; }
+.hover\:bg-gold-600:hover    { background-color: #1e40af !important; }
+.border-gold-300             { border-color: #bfdbfe !important; }
+.border-gold-400             { border-color: #60a5fa !important; }
+.hover\:border-gold-400:hover { border-color: #93c5fd !important; }
+.focus\:ring-gold-400:focus  { --tw-ring-color: rgba(29,78,216,0.3) !important; }
+.accent-gold-500             { accent-color: #1d4ed8 !important; }
+
+/* ── Increment / Decrement buttons (dark tones → light) ─────── */
+.bg-emerald-900\/50              { background-color: #f0fdf4 !important; }
+.text-emerald-300                { color: #15803d !important; }
+.border-emerald-600              { border-color: #86efac !important; }
+.hover\:bg-emerald-800\/60:hover { background-color: #dcfce7 !important; }
+
+.bg-violet-900\/50               { background-color: #f5f3ff !important; }
+.text-violet-300                 { color: #6d28d9 !important; }
+.border-violet-600               { border-color: #c4b5fd !important; }
+.hover\:bg-violet-800\/60:hover  { background-color: #ede9fe !important; }
+
+.bg-red-900\/50                  { background-color: #fff1f2 !important; }
+.text-red-300                    { color: #dc2626 !important; }
+.border-red-700                  { border-color: #fca5a5 !important; }
+.hover\:bg-red-800\/60:hover     { background-color: #fee2e2 !important; }
+
+/* ── Element input: red flag state ─────────────────────────── */
+.bg-red-900\/30 { background-color: #fff1f2 !important; }
+
+/* ── Σ Total indicator ─────────────────────────────────────── */
+.bg-green-900\/40 { background-color: #f0fdf4 !important; }
+.text-green-400   { color: #16a34a !important; }
+.text-green-500   { color: #15803d !important; }
+
+.bg-yellow-900\/40 { background-color: #fefce8 !important; }
+.text-yellow-400   { color: #ca8a04 !important; }
+.text-yellow-500   { color: #b45309 !important; }
+
+/* ── Soften panel shadows on white bg ──────────────────────── */
+.shadow {
+	box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04) !important;
+}

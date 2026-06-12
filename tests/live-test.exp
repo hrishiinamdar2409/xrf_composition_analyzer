@@ -1,0 +1,88 @@
+@CAL	GoldAlloy
+@PRN	Gold Analysis
+@EL1	Au
+@EL2	Ag
+@EL3	Cu
+@EL4	Zn
+@DM1	%
+@DM2	%
+@DM3	%
+@DM4	%
+
+@NBR	1
+@PRF	GoldAlloy
+@VA1	75.234
+@VA2	12.456
+@VA3	11.987
+@VA4	0.323
+
+@NBR	2
+@PRF	GoldAlloy
+@VA1	75.118
+@VA2	12.512
+@VA3	12.043
+@VA4	0.327
+
+@NBR	3
+@PRF	GoldAlloy
+@VA1	75.301
+@VA2	12.389
+@VA3	11.998
+@VA4	0.312
+
+@NBR	4
+@PRF	GoldAlloy
+@VA1	74.956
+@VA2	12.601
+@VA3	12.118
+@VA4	0.325
+
+@NBR	5
+@PRF	GoldAlloy
+@VA1	91.623
+@VA2	5.234
+@VA3	3.012
+@VA4	0.131
+
+@NBR	6
+@PRF	GoldAlloy
+@VA1	91.714
+@VA2	5.189
+@VA3	2.978
+@VA4	0.119
+
+@NBR	7
+@PRF	GoldAlloy
+@VA1	91.580
+@VA2	5.251
+@VA3	3.041
+@VA4	0.128
+
+@NBR	8
+@PRF	GoldAlloy
+@VA1	58.412
+@VA2	25.341
+@VA3	4.123
+@VA4	12.124
+
+@NBR	9
+@PRF	GoldAlloy
+@VA1	58.378
+@VA2	25.289
+@VA3	4.209
+@VA4	12.124
+
+@NBR	10
+@PRF	GoldAlloy
+@VA1	58.501
+@VA2	25.312
+@VA3	4.067
+@VA4	12.120
+
+@NBR	11
+@PRF	GoldAlloy
+@VA1	52.100
+@VA2	30.201
+@VA3	5.400
+@VA4	12.299
+
