@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast, { Toaster } from 'react-hot-toast'
 import { useWebSocket } from '../hooks/useWebSocket'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -100,9 +101,7 @@ export default function ReadingsPage() {
   const [saving,             setSaving]             = useState(false)
   const [printing,           setPrinting]           = useState(false)
   const [editingSampleId,    setEditingSampleId]    = useState(null)
-  const [toast,              setToast]              = useState(null)
   const isLoadingEditRef = useRef(false)
-  const toastTimerRef = useRef(null)
   const nextItemTimerRef = useRef(null)
 
   const clearDrafts = useCallback(() => {
@@ -122,12 +121,6 @@ export default function ReadingsPage() {
     if (abs >= 0.3) return 'high'
     if (abs >= 0.05) return 'mid'
     return 'low'
-  }, [])
-
-  const showSuccessToast = useCallback((message) => {
-    setToast({ kind: 'success', message })
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = setTimeout(() => setToast(null), 3500)
   }, [])
 
   const fetchNextSrNo = useCallback(() => {
@@ -516,7 +509,6 @@ export default function ReadingsPage() {
 
   useEffect(() => {
     return () => {
-      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
       if (nextItemTimerRef.current) clearTimeout(nextItemTimerRef.current)
     }
   }, [])
@@ -654,8 +646,14 @@ export default function ReadingsPage() {
   const handleSave = async () => {
     const saved = await saveSampleToDb()
     if (!saved?.sampleId) return
+    
     const srNo = saved.srNo || saved.jobRef || saved.sampleId
-    showSuccessToast(`Saved Sr No ${srNo}`)
+    
+    // Using react-hot-toast
+    toast.success(`Saved Sr No ${srNo}`, {
+      duration: 3000,
+      position: 'top-right',
+    })
 
     if (nextItemTimerRef.current) clearTimeout(nextItemTimerRef.current)
     if (entryMode === ENTRY_MODE.MULTI) {
@@ -693,7 +691,12 @@ export default function ReadingsPage() {
       }
 
       const srNo = saved.srNo || saved.jobRef || saved.sampleId
-      showSuccessToast(`Printed Sr No ${srNo}${body?.printer ? ` (${body.printer})` : ''}`)
+      
+      // Using react-hot-toast
+      toast.success(`Printed Sr No ${srNo}${body?.printer ? ` (${body.printer})` : ''}`, {
+        duration: 3000,
+        position: 'top-right',
+      })
 
       if (nextItemTimerRef.current) clearTimeout(nextItemTimerRef.current)
       if (entryMode === ENTRY_MODE.MULTI) {
@@ -706,7 +709,7 @@ export default function ReadingsPage() {
       }
     } catch (err) {
       console.error('[handlePrint] Error:', err)
-      setFieldError('general', err.message || 'Could not print. Please try again.')
+      toast.error(err.message || 'Could not print. Please try again.')
     } finally {
       setPrinting(false)
     }
@@ -746,6 +749,8 @@ export default function ReadingsPage() {
 
   return (
     <div className="w-full">
+      {/* Add Toaster component at the top level */}
+      <Toaster />
 
       {/* TWO-COLUMN LAYOUT — 50 / 50 */}
       <div className="flex gap-3 items-start">
@@ -870,17 +875,6 @@ export default function ReadingsPage() {
               </button>
               </div>
             </div>
-            {toast && (
-              <div className="mt-2 flex items-center justify-between rounded-md border border-green-600/40 bg-green-900/20 px-3 py-2">
-                <span className="text-xs font-semibold text-green-300">{toast.message}</span>
-                <button
-                  onClick={() => navigate('/samples')}
-                  className="text-xs text-blue-300 hover:text-blue-200 underline underline-offset-2"
-                >
-                  View Queue
-                </button>
-              </div>
-            )}
             {(formErrors.general || formErrors.readingIds || formErrors.composition || formErrors.primaryValue || formErrors.elementSum) && (
               <div className="mt-2 rounded-md border border-red-600/40 bg-red-900/20 px-3 py-2 text-xs text-red-300">
                 {formErrors.general && <div>{formErrors.general}</div>}
@@ -1218,17 +1212,17 @@ export default function ReadingsPage() {
                         <td className="px-2 py-1.5" />
                         <td className="px-2 py-1.5 text-[#1a73ca] text-xs uppercase tracking-wide whitespace-nowrap">
                           Avg ({selectedReadingIds.size})
-                        </td>
+                         </td>
                         <td className="px-2 py-1.5 text-[#1a73ca] text-xs">—</td>
                         {READING_COLUMNS.map(sym => {
                           const avg = sums[sym] != null ? sums[sym] / counts[sym] : 0
                           return (
                             <td key={sym} className="px-2 py-1.5 text-right font-mono text-[#1a73ca]">
                               {avg.toFixed(3)}
-                            </td>
+                             </td>
                           )
                         })}
-                      </tr>
+                       </tr>
                     )
                   })()}
                 </tbody>

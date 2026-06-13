@@ -1,10 +1,12 @@
- import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import toast, { Toaster } from 'react-hot-toast'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const PIN_STORAGE_KEY = 'configPin'
 const API = {
   settings: '/api/settings',
   printers: '/api/settings/printers',
+  browse: '/api/settings/browse-exp',
 }
 
 // ─── Small presentational helpers ──────────────────────────────────────────────
@@ -63,7 +65,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
   const [browsing, setBrowsing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [toast, setToast] = useState(null) // { tone, message }
   const [errors, setErrors] = useState({})
 
   const authHeaders = useMemo(() => (configPin ? { 'x-config-pin': configPin } : {}), [configPin])
@@ -72,11 +73,6 @@ export default function SettingsPage() {
     if (!settings || !draft) return false
     return settings.expFilePath !== draft.expFilePath || settings.printerName !== draft.printerName
   }, [settings, draft])
-
-  const flashToast = useCallback((tone, message, ttl = 2800) => {
-    setToast({ tone, message })
-    if (ttl) setTimeout(() => setToast(null), ttl)
-  }, [])
 
   const loadProtectedData = useCallback(async (pin) => {
     setLoading(true)
@@ -94,6 +90,19 @@ export default function SettingsPage() {
       setLoading(false)
     }
   }, [])
+
+  const refreshPrinters = async () => {
+    if (!configPin) return
+    try {
+      const pRes = await fetch(API.printers, { headers: { 'x-config-pin': configPin } })
+      const pBody = await pRes.json().catch(() => ({}))
+      const printerList = Array.isArray(pBody?.printers) ? pBody.printers : []
+      setPrinters(printerList)
+      toast.success(`Found ${printerList.length} printer${printerList.length === 1 ? '' : 's'}`)
+    } catch (err) {
+      toast.error('Failed to refresh printers')
+    }
+  }
 
   useEffect(() => {
     const cached = sessionStorage.getItem(PIN_STORAGE_KEY) || ''
@@ -147,23 +156,21 @@ export default function SettingsPage() {
   const enterEdit = () => {
     setDraft(settings)
     setErrors({})
-    setToast(null)
     setIsEditing(true)
   }
 
   const cancelEdit = () => {
     setDraft(settings)
     setErrors({})
-    setToast(null)
     setIsEditing(false)
   }
 
   const save = async () => {
-    setToast(null)
     if (!validate()) {
-      flashToast('danger', 'Please fix the highlighted fields.')
+      toast.error('Please fix the highlighted fields')
       return
     }
+    
     setSaving(true)
     try {
       const res = await fetch(API.settings, {
@@ -175,36 +182,74 @@ export default function SettingsPage() {
       if (!res.ok) {
         const mapped = mapServerErrors(body)
         if (Object.keys(mapped).length) setErrors(prev => ({ ...prev, ...mapped }))
-        flashToast('danger', body?.error || 'Could not save configuration.', 4000)
-        return
+        throw new Error(body?.error || 'Could not save configuration.')
       }
       setSettings(body)
       setDraft(body)
       setIsEditing(false)
-      flashToast('success', 'Configuration saved successfully.')
+      toast.success('Configuration saved')
+    } catch (err) {
+      toast.error(err.message || 'Could not save configuration')
     } finally {
       setSaving(false)
     }
   }
 
   const browseExpPath = async () => {
-    if (!isEditing) setIsEditing(true)
+    console.log('Browse button clicked')
+    
+    if (!isEditing) {
+      console.log('Not in edit mode, enabling edit mode first')
+      setIsEditing(true)
+    }
+    
     setBrowsing(true)
+    toast.loading('Opening file browser...', { id: 'browse' })
+    
     try {
-      const res = await fetch('/api/settings/browse-exp', {
+      const currentPath = draft?.expFilePath || ''
+      console.log('Current path:', currentPath)
+      console.log('Auth headers:', authHeaders)
+      
+      const response = await fetch(API.browse, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ currentPath: draft.expFilePath || '' }),
+        headers: { 
+          'Content-Type': 'application/json', 
+          ...authHeaders 
+        },
+        body: JSON.stringify({ currentPath }),
       })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        flashToast('danger', body?.error || 'Could not open file browser.', 4000)
-        return
+      
+      console.log('Response status:', response.status)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Error response:', errorText)
+        throw new Error(`Server responded with ${response.status}: ${errorText}`)
       }
-      if (!body?.cancelled && body?.path) {
-        update('expFilePath', body.path)
+      
+      const data = await response.json()
+      console.log('Response data:', data)
+      
+      if (data.error) {
+        throw new Error(data.error)
+      }
+      
+      if (!data.cancelled && data.path) {
+        console.log('Selected path:', data.path)
+        update('expFilePath', data.path)
         clearError('expFilePath')
+        toast.success('File path selected', { id: 'browse' })
+      } else if (data.cancelled) {
+        console.log('User cancelled browsing')
+        toast('Selection cancelled', { id: 'browse', icon: '📁' })
+      } else {
+        console.log('No path returned')
+        toast.error('No file selected', { id: 'browse' })
       }
+    } catch (err) {
+      console.error('Browse error:', err)
+      toast.error(err.message || 'Could not open file browser', { id: 'browse' })
     } finally {
       setBrowsing(false)
     }
@@ -212,7 +257,11 @@ export default function SettingsPage() {
 
   const unlock = async () => {
     const pin = pinInput.trim()
-    if (!pin) { setUnlockError('Enter the configuration PIN.'); return }
+    if (!pin) { 
+      setUnlockError('Enter the configuration PIN.')
+      return 
+    }
+    
     setUnlocking(true)
     setUnlockError('')
     try {
@@ -220,8 +269,10 @@ export default function SettingsPage() {
       setConfigPin(pin)
       sessionStorage.setItem(PIN_STORAGE_KEY, pin)
       setPinInput('')
+      toast.success('Configuration unlocked')
     } catch {
       setUnlockError('Invalid PIN. Configuration is restricted.')
+      toast.error('Invalid PIN')
     } finally {
       setUnlocking(false)
     }
@@ -235,13 +286,14 @@ export default function SettingsPage() {
     setIsEditing(false)
     setPrinters([])
     setErrors({})
-    setToast(null)
+    toast.success('Configuration locked')
   }
 
   // ── Locked / unlock screen ────────────────────────────────────────────────
   if (!configPin || !settings || !draft) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center px-4">
+        <Toaster position="top-right" />
         <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="bg-slate-900 px-6 py-5 text-white">
             <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-slate-300">
@@ -287,6 +339,8 @@ export default function SettingsPage() {
   // ── Unlocked configuration screen ─────────────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-12">
+      <Toaster position="top-right" />
+      
       {/* Page header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -303,20 +357,6 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
-
-      {/* Toast */}
-      {toast && (
-        <div
-          role="status"
-          className={`rounded-lg border px-3.5 py-2.5 text-sm font-medium ${
-            toast.tone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-            : toast.tone === 'danger' ? 'border-red-200 bg-red-50 text-red-700'
-            : 'border-slate-200 bg-slate-50 text-slate-700'
-          }`}
-        >
-          {toast.message}
-        </div>
-      )}
 
       {/* Current configuration summary */}
       <SectionCard
@@ -406,9 +446,9 @@ export default function SettingsPage() {
         aside={
           isEditing && (
             <button
-              onClick={() => loadProtectedData(configPin)}
+              onClick={refreshPrinters}
               disabled={loading}
-              className="text-xs font-semibold text-[#1a73ca] hover:text-[#1a73ca] disabled:opacity-50"
+              className="text-xs font-semibold text-[#1a73ca] hover:text-[#1a73ca] disabled:opacity-50 transition-colors"
             >
               {loading ? 'Loading…' : 'Reload printers'}
             </button>
@@ -438,7 +478,7 @@ export default function SettingsPage() {
 
           {errors.printerName && <p className="mt-1 text-xs text-red-600">{errors.printerName}</p>}
           {!errors.printerName && printers.length === 0 && (
-            <p className="mt-1 text-xs text-amber-600">No printers detected. Check Windows printers, then click “Reload printers”.</p>
+            <p className="mt-1 text-xs text-amber-600">No printers detected. Check Windows printers, then click "Reload printers".</p>
           )}
           {!errors.printerName && printerMissing && (
             <p className="mt-1 text-xs text-amber-600">The saved printer is not currently available on this machine.</p>

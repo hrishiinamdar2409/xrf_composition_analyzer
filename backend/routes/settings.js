@@ -69,47 +69,62 @@ function listAvailablePrinters() {
 function browseExpFile(currentPath = '') {
   return new Promise((resolve, reject) => {
     const safeCurrent = String(currentPath || '').replace(/'/g, "''");
-    const script = [
-      "$ErrorActionPreference = 'Stop'",
-      "$shell = New-Object -ComObject Shell.Application",
-      "$folder = $null",
-      `$initial = '${safeCurrent}'`,
-      "if ($initial) {",
-      "  try {",
-      "    if (Test-Path -LiteralPath $initial) {",
-      "      $target = Get-Item -LiteralPath $initial",
-      "      if ($target.PSIsContainer) { $folder = $target.FullName } else { $folder = Split-Path -Parent $target.FullName }",
-      "    }",
-      "  } catch { }",
-      "}",
-      "$title = 'Select WinFTM Export File (.exp)'",
-      "$selected = $shell.BrowseForFolder(0, $title, 0x4000, $folder)",
-      "if (-not $selected) { exit 0 }",
-      "$path = $selected.Self.Path",
-      "if (-not $path) { exit 0 }",
-      "if ((Get-Item -LiteralPath $path -ErrorAction SilentlyContinue) -and (Get-Item -LiteralPath $path).PSIsContainer) {",
-      "  $candidate = Get-ChildItem -LiteralPath $path -Filter '*.exp' -File -ErrorAction SilentlyContinue | Select-Object -First 1",
-      "  if ($candidate) { $path = $candidate.FullName } else { exit 0 }",
-      "}",
-      "if ($path.ToLower().EndsWith('.exp')) { Write-Output $path }",
-    ].join('; ');
+    
+    // Improved PowerShell script using Windows Forms instead of Shell.Application
+    const script = `
+      Add-Type -AssemblyName System.Windows.Forms
+      
+      $initialDir = ''
+      if ('${safeCurrent}') {
+        try {
+          if (Test-Path -LiteralPath '${safeCurrent}') {
+            $item = Get-Item -LiteralPath '${safeCurrent}' -ErrorAction SilentlyContinue
+            if ($item.PSIsContainer) {
+              $initialDir = $item.FullName
+            } else {
+              $initialDir = Split-Path -Parent $item.FullName
+            }
+          }
+        } catch {
+          $initialDir = [Environment]::GetFolderPath('Desktop')
+        }
+      } else {
+        $initialDir = [Environment]::GetFolderPath('Desktop')
+      }
+      
+      $fileDialog = New-Object System.Windows.Forms.OpenFileDialog
+      $fileDialog.InitialDirectory = $initialDir
+      $fileDialog.Filter = "Export files (*.exp)|*.exp|All files (*.*)|*.*"
+      $fileDialog.Title = "Select WinFTM Export File (.exp)"
+      $fileDialog.CheckFileExists = $true
+      $fileDialog.Multiselect = $false
+      
+      $result = $fileDialog.ShowDialog()
+      
+      if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        Write-Output $fileDialog.FileName
+      } else {
+        Write-Output ""
+      }
+    `;
 
     execFile(
       'powershell.exe',
-      ['-NoProfile', '-STA', '-Command', script],
-      { windowsHide: false, timeout: 120000 },
+      ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      { 
+        windowsHide: true, 
+        timeout: 120000,
+        env: { ...process.env }
+      },
       (err, stdout, stderr) => {
         if (err) {
-          if (err.killed || err.signal || err.code === 1) {
-            const detail = (stderr || stdout || '').trim();
-            if (!detail) {
-              resolve('');
-              return;
-            }
-          }
-          reject(new Error(stderr || stdout || err.message));
+          console.error('PowerShell error:', err);
+          console.error('stderr:', stderr);
+          // Return empty string on error (user cancelled or dialog failed)
+          resolve('');
           return;
         }
+        
         const selected = String(stdout || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean).pop() || '';
         resolve(selected);
       }

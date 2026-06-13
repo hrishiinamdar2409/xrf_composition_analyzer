@@ -1,7 +1,6 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import ReadingsPage from './pages/ReadingsPage'
 import SamplesPage from './pages/SamplesPage'
-import SampleDetailPage from './pages/SampleDetailPage'
 import SettingsPage from './pages/SettingsPage'
 
 const navCls = ({ isActive }) =>
@@ -48,7 +47,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<ReadingsPage />} />
           <Route path="/samples" element={<SamplesPage />} />
-          <Route path="/samples/:id" element={<SampleDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
