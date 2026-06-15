@@ -350,10 +350,10 @@ export default function ReadingsPage() {
         errors.composition = `${symbol} cannot be negative.`
         break
       }
-      if (POWDER_ELEMENTS.has(symbol) && val > 0) {
-        errors.composition = `${symbol} should be 0 for this workflow.`
-        break
-      }
+      // if (POWDER_ELEMENTS.has(symbol) && val > 0) {
+      //   errors.composition = `${symbol} should be 0 for this workflow.`
+      //   break
+      // }
     }
 
     setFormErrors(errors)
@@ -801,7 +801,7 @@ export default function ReadingsPage() {
                 </div>
               </div>
 
-              <Field label="Sr. No." helper="Auto-generated (calculated before save)">
+              <Field label="Sr. No.">
                 <input className={INPUT} type="text" value={srNo} disabled 
                   placeholder="Calculating next Sr.No..." />
               </Field>
