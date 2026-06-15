@@ -17,18 +17,18 @@ const createSettingsRouter = require('./routes/settings');
 const auditRouter = require('./routes/audit');
 
 const PORT = process.env.PORT || 3000;
-const CONFIG_PIN = String(process.env.GOLDSCOPE_CONFIG_PIN || '2580');
+//const CONFIG_PIN = String(process.env.GOLDSCOPE_CONFIG_PIN || '2580');
 
 const app = express();
 app.use(express.json());
 
-function requireConfigPin(req, res, next) {
-  const supplied = String(req.get('x-config-pin') || '');
-  if (!supplied || supplied !== CONFIG_PIN) {
-    return res.status(401).json({ error: 'Configuration access denied' });
-  }
-  return next();
-}
+// function requireConfigPin(req, res, next) {
+//   const supplied = String(req.get('x-config-pin') || '');
+//   if (!supplied || supplied !== CONFIG_PIN) {
+//     return res.status(401).json({ error: 'Configuration access denied' });
+//   }
+//   return next();
+// }
 
 let activeExpFilePath = 'C:\\FischerExport\\results.exp';
 const applyExpFileWatcher = (nextPath) => {
@@ -49,7 +49,7 @@ app.use(express.static(path.join(__dirname, '..', 'frontend', 'dist')));
 // API routes
 app.use('/api/readings', readingsRouter);
 app.use('/api/samples', samplesRouter);
-app.use('/api/settings', requireConfigPin, settingsRouter);
+app.use('/api/settings', settingsRouter);
 app.use('/api/audit', auditRouter);
 
 // Health check

@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import toast, { Toaster } from 'react-hot-toast'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const PIN_STORAGE_KEY = 'configPin'
 const API = {
   settings: '/api/settings',
   printers: '/api/settings/printers',
@@ -56,45 +55,40 @@ export default function SettingsPage() {
   const [draft, setDraft] = useState(null)
   const [printers, setPrinters] = useState([])
 
-  const [pinInput, setPinInput] = useState('')
-  const [configPin, setConfigPin] = useState('')
-  const [unlockError, setUnlockError] = useState('')
-  const [unlocking, setUnlocking] = useState(false)
-
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [browsing, setBrowsing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
 
-  const authHeaders = useMemo(() => (configPin ? { 'x-config-pin': configPin } : {}), [configPin])
-
   const isDirty = useMemo(() => {
     if (!settings || !draft) return false
     return settings.expFilePath !== draft.expFilePath || settings.printerName !== draft.printerName
   }, [settings, draft])
 
-  const loadProtectedData = useCallback(async (pin) => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const sRes = await fetch(API.settings, { headers: { 'x-config-pin': pin } })
-      if (!sRes.ok) throw new Error('Unauthorized')
+      const sRes = await fetch(API.settings)
+      if (!sRes.ok) throw new Error('Failed to load settings')
       const sBody = await sRes.json()
       setSettings(sBody)
       setDraft(sBody)
 
-      const pRes = await fetch(API.printers, { headers: { 'x-config-pin': pin } })
+      const pRes = await fetch(API.printers)
       const pBody = await pRes.json().catch(() => ({}))
       setPrinters(Array.isArray(pBody?.printers) ? pBody.printers : [])
+    } catch (err) {
+      toast.error('Failed to load settings')
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }, [])
 
   const refreshPrinters = async () => {
-    if (!configPin) return
     try {
-      const pRes = await fetch(API.printers, { headers: { 'x-config-pin': configPin } })
+      const pRes = await fetch(API.printers)
       const pBody = await pRes.json().catch(() => ({}))
       const printerList = Array.isArray(pBody?.printers) ? pBody.printers : []
       setPrinters(printerList)
@@ -105,20 +99,8 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    const cached = sessionStorage.getItem(PIN_STORAGE_KEY) || ''
-    if (cached) setConfigPin(cached)
-  }, [])
-
-  useEffect(() => {
-    if (!configPin) return
-    loadProtectedData(configPin).catch(() => {
-      sessionStorage.removeItem(PIN_STORAGE_KEY)
-      setConfigPin('')
-      setSettings(null)
-      setDraft(null)
-      setIsEditing(false)
-    })
-  }, [configPin, loadProtectedData])
+    loadData()
+  }, [loadData])
 
   const update = (key, val) => setDraft(s => ({ ...s, [key]: val }))
 
@@ -175,7 +157,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch(API.settings, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),
       })
       const body = await res.json().catch(() => ({}))
@@ -209,14 +191,10 @@ export default function SettingsPage() {
     try {
       const currentPath = draft?.expFilePath || ''
       console.log('Current path:', currentPath)
-      console.log('Auth headers:', authHeaders)
       
       const response = await fetch(API.browse, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          ...authHeaders 
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPath }),
       })
       
@@ -255,80 +233,28 @@ export default function SettingsPage() {
     }
   }
 
-  const unlock = async () => {
-    const pin = pinInput.trim()
-    if (!pin) { 
-      setUnlockError('Enter the configuration PIN.')
-      return 
-    }
-    
-    setUnlocking(true)
-    setUnlockError('')
-    try {
-      await loadProtectedData(pin)
-      setConfigPin(pin)
-      sessionStorage.setItem(PIN_STORAGE_KEY, pin)
-      setPinInput('')
-      toast.success('Configuration unlocked')
-    } catch {
-      setUnlockError('Invalid PIN. Configuration is restricted.')
-      toast.error('Invalid PIN')
-    } finally {
-      setUnlocking(false)
-    }
+  if (loading && !settings) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gold-500 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading configuration...</p>
+        </div>
+      </div>
+    )
   }
 
-  const lock = () => {
-    sessionStorage.removeItem(PIN_STORAGE_KEY)
-    setConfigPin('')
-    setSettings(null)
-    setDraft(null)
-    setIsEditing(false)
-    setPrinters([])
-    setErrors({})
-    toast.success('Configuration locked')
-  }
-
-  // ── Locked / unlock screen ────────────────────────────────────────────────
-  if (!configPin || !settings || !draft) {
+  if (!settings) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center px-4">
-        <Toaster position="top-right" />
-        <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="bg-slate-900 px-6 py-5 text-white">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-slate-300">
-              <span aria-hidden>🔒</span> Restricted Area
-            </div>
-            <h1 className="mt-1 text-lg font-bold">Configuration Access</h1>
-            <p className="mt-1 text-xs text-slate-300">Admin only. Enter the configuration PIN to manage system settings.</p>
-          </div>
-          <form
-            className="px-6 py-5 space-y-4"
-            onSubmit={e => { e.preventDefault(); unlock() }}
+        <div className="text-center">
+          <p className="text-red-600">Failed to load configuration</p>
+          <button
+            onClick={loadData}
+            className="mt-4 rounded-md bg-gold-500 px-4 py-2 text-sm font-semibold text-white hover:bg-gold-600"
           >
-            <div>
-              <label htmlFor="config-pin" className="text-xs font-semibold text-slate-600">Configuration PIN</label>
-              <input
-                id="config-pin"
-                type="password"
-                inputMode="numeric"
-                autoFocus
-                value={pinInput}
-                onChange={e => { setPinInput(e.target.value); setUnlockError('') }}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm tracking-widest focus:outline-none focus:ring-2 focus:ring-gold-400 focus:border-gold-400"
-                placeholder="••••"
-                aria-invalid={Boolean(unlockError)}
-              />
-              {unlockError && <p className="mt-1 text-xs text-red-600">{unlockError}</p>}
-            </div>
-            <button
-              type="submit"
-              disabled={unlocking}
-              className="w-full rounded-lg bg-gold-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
-            >
-              {unlocking ? 'Verifying…' : 'Unlock Configuration'}
-            </button>
-          </form>
+            Retry
+          </button>
         </div>
       </div>
     )
@@ -336,7 +262,7 @@ export default function SettingsPage() {
 
   const printerMissing = Boolean(draft.printerName) && !printers.includes(draft.printerName)
 
-  // ── Unlocked configuration screen ─────────────────────────────────────────
+  // ── Configuration screen ─────────────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-12">
       <Toaster position="top-right" />
@@ -348,13 +274,7 @@ export default function SettingsPage() {
           <p className="text-xs text-slate-500">Manage the WinFTM export source and the print destination.</p>
         </div>
         <div className="flex items-center gap-2">
-          <StatusPill tone="success">Unlocked</StatusPill>
-          <button
-            onClick={lock}
-            className="rounded-md border border-[#1a73ca] px-3 py-1.5 text-xs font-semibold text-[#1a73ca] hover:bg-[#e8f1fb] transition-colors"
-          >
-            Lock
-          </button>
+          <StatusPill tone="success">Configured</StatusPill>
         </div>
       </div>
 
@@ -379,7 +299,7 @@ export default function SettingsPage() {
           {!isEditing ? (
             <button
               onClick={enterEdit}
-              className="rounded-md bg-[#1a73ca] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1a73ca] transition-colors"
+              className="rounded-md bg-gold-500 px-4 py-2 text-sm font-semibold text-white hover:bg-gold-600 transition-colors"
             >
               Edit Configuration
             </button>
@@ -387,15 +307,15 @@ export default function SettingsPage() {
             <button
               onClick={cancelEdit}
               disabled={saving}
-              className="rounded-md border border-[#1a73ca] px-4 py-2 text-sm font-semibold text-[#1a73ca] hover:bg-[#e8f1fb] disabled:opacity-50 transition-colors"
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
             >
               Cancel
             </button>
           )}
           <button
-            onClick={() => loadProtectedData(configPin)}
+            onClick={loadData}
             disabled={loading || saving}
-            className="rounded-md border border-[#1a73ca] px-4 py-2 text-sm font-semibold text-[#1a73ca] hover:bg-[#e8f1fb] disabled:opacity-50 transition-colors"
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
           >
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
@@ -421,14 +341,14 @@ export default function SettingsPage() {
               className={`block w-full rounded-lg border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 transition-colors ${
                 errors.expFilePath
                   ? 'border-red-300 focus:ring-red-300'
-                  : 'border-slate-300 focus:ring-[#1a73ca] focus:border-[#1a73ca]'
+                  : 'border-slate-300 focus:ring-gold-400 focus:border-gold-400'
               } disabled:bg-slate-50 disabled:text-slate-500`}
             />
             <button
               type="button"
               onClick={browseExpPath}
               disabled={browsing || saving}
-              className="shrink-0 rounded-md bg-[#1a73ca] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1a73ca] disabled:opacity-50 transition-colors"
+              className="shrink-0 rounded-md bg-gold-500 px-4 py-2 text-sm font-semibold text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
             >
               {browsing ? 'Opening…' : 'Browse'}
             </button>
@@ -448,7 +368,7 @@ export default function SettingsPage() {
             <button
               onClick={refreshPrinters}
               disabled={loading}
-              className="text-xs font-semibold text-[#1a73ca] hover:text-[#1a73ca] disabled:opacity-50 transition-colors"
+              className="text-xs font-semibold text-gold-600 hover:text-gold-700 disabled:opacity-50 transition-colors"
             >
               {loading ? 'Loading…' : 'Reload printers'}
             </button>
@@ -500,14 +420,14 @@ export default function SettingsPage() {
               <button
                 onClick={cancelEdit}
                 disabled={saving}
-                className="rounded-md border border-[#1a73ca] px-4 py-2 text-sm font-semibold text-[#1a73ca] hover:bg-[#e8f1fb] disabled:opacity-50 transition-colors"
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={save}
                 disabled={saving || !isDirty}
-                className="rounded-md bg-[#1a73ca] px-5 py-2 text-sm font-semibold text-white hover:bg-[#1a73ca] disabled:opacity-50 transition-colors"
+                className="rounded-md bg-gold-500 px-5 py-2 text-sm font-semibold text-white hover:bg-gold-600 disabled:opacity-50 transition-colors"
               >
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>
