@@ -119,8 +119,8 @@ textarea:disabled {
 }
 
 html {
-    zoom: 0.76 !important;
-    -moz-transform: scale(0.76) !important;
+    zoom: 0.9 !important;
+    -moz-transform: scale(0.9) !important;
     -moz-transform-origin: top left !important;
 }
 

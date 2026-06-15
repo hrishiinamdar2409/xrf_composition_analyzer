@@ -16,7 +16,7 @@ const samplesRouter = require('./routes/samples');
 const createSettingsRouter = require('./routes/settings');
 const auditRouter = require('./routes/audit');
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 //const CONFIG_PIN = String(process.env.GOLDSCOPE_CONFIG_PIN || '2580');
 
 const app = express();
