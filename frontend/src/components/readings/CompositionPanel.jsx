@@ -1,0 +1,239 @@
+import { useState } from 'react'
+import { 
+  INCREMENT_STEPS, 
+  DECREMENT_STEPS, 
+  UPPER_RANGE, 
+  UPPER_LIMIT,
+  PRIMARY_ELEMENT,
+  ELEMENT_NAMES,
+  NON_EDITABLE_ELEMENTS,
+  POWDER_ELEMENTS,
+  ALL_ELEMENT_GROUPS
+} from '../../constants/readingsConstants'
+import { formatCompact, formatSigned, deltaTone, nameToSymbolMap } from '../../utils/readingsUtils'
+
+export default function CompositionPanel({
+  sampleCat,
+  primKey,
+  displayPrim,
+  impurity,
+  elementSum,
+  primaryDeltaRow,
+  primaryValue,
+  setPrimaryValue,
+  elementValues,
+  setElementValues,
+  machineBaseline,
+  rebalanceCu,
+  clearDrafts,
+  primaryDraft,
+  setPrimaryDraft,
+  elementDrafts,
+  setElementDrafts,
+  handleElementChange
+}) {
+  const nameToSym = nameToSymbolMap()
+  const [localPrimaryDraft, setLocalPrimaryDraft] = useState(primaryDraft)
+
+  const applyStep = (step) => {
+    clearDrafts()
+    const currentPrim = primaryValue ?? elementValues[primKey] ?? 0
+    let newPrim
+    if (step.snap === 'upper_range') {
+      newPrim = UPPER_RANGE[sampleCat] ?? 99.9
+    } else if (step.snap === 'upper_limit') {
+      newPrim = UPPER_LIMIT[sampleCat] ?? 91.67
+    } else {
+      newPrim = parseFloat(Math.max(0, Math.min(100, currentPrim + step.delta)).toFixed(3))
+    }
+    setPrimaryValue(newPrim)
+    setElementValues(prev => rebalanceCu(newPrim, prev))
+  }
+
+  const elementGroupsForDisplay = ALL_ELEMENT_GROUPS.map(group =>
+    group.map(name => {
+      if (name === ELEMENT_NAMES[primKey]) return ELEMENT_NAMES[primKey]
+      return name
+    })
+  )
+
+  return (
+    <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4">
+      <p className="text-sm font-semibold text-slate-700 mb-3">COMPOSITION CONTROL PANEL</p>
+
+      {/* 3 VALUE BOXES + BUTTONS in one row */}
+      <div className="flex items-center gap-3">
+        {/* Primary element box */}
+        <div className="flex flex-col items-center gap-0.5 shrink-0">
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${
+            primKey === 'Au' ? 'text-amber-700' : 'text-[#1a73ca]'
+          }`}>{ELEMENT_NAMES[primKey] || primKey}</span>
+          <input
+            type="number" step="0.001" min="0" max="100"
+            value={localPrimaryDraft ?? formatCompact(displayPrim)}
+            onChange={e => {
+              const raw = e.target.value
+              setLocalPrimaryDraft(raw)
+              const val = parseFloat(raw)
+              if (!isNaN(val)) {
+                const newPrim = parseFloat(Math.max(0, Math.min(100, val)).toFixed(3))
+                setPrimaryValue(newPrim)
+                setElementValues(prev => rebalanceCu(newPrim, prev))
+              }
+            }}
+            onBlur={() => {
+              setLocalPrimaryDraft(null)
+              setPrimaryDraft(null)
+            }}
+            className={`w-24 h-10 rounded-lg border-2 text-center text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 ${
+              primKey === 'Au'
+                ? 'bg-amber-50 border-amber-500 text-amber-700 focus:ring-amber-400'
+                : 'bg-[#1a73ca] border-[#1a73ca] text-white focus:ring-[#1a73ca]'
+            }`}
+          />
+          <span className={`text-[9px] font-semibold ${
+            primKey === 'Au' ? 'text-amber-600' : 'text-[#1a73ca]'
+          }`}>{primKey} · % Pure</span>
+        </div>
+
+        {/* Impurity box */}
+        <div className="flex flex-col items-center gap-0.5 shrink-0">
+          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Impurity</span>
+          <div className="w-24 h-10 rounded-lg bg-slate-50 border-2 border-slate-300 flex items-center justify-center select-none pointer-events-none">
+            <span className="text-lg font-semibold text-slate-700 tabular-nums">{formatCompact(impurity)}</span>
+          </div>
+          <span className="text-[9px] text-slate-500 font-semibold">100 - {primKey}</span>
+        </div>
+
+        {/* Total Sum box */}
+        <div className="flex flex-col items-center gap-0.5 shrink-0">
+          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Sum Total</span>
+          <div className={`w-24 h-10 rounded-lg border-2 flex items-center justify-center select-none pointer-events-none ${
+            Math.abs(elementSum - 100) < 0.01
+              ? 'bg-green-50 border-green-300'
+              : 'bg-amber-50 border-amber-300'
+          }`}>
+            <span className={`text-lg font-semibold tabular-nums ${
+              Math.abs(elementSum - 100) < 0.01 ? 'text-green-700' : 'text-amber-700'
+            }`}>{formatCompact(elementSum)}</span>
+          </div>
+          <span className={`text-[9px] font-semibold ${
+            Math.abs(elementSum - 100) < 0.01 ? 'text-green-700' : 'text-amber-700'
+          }`}>
+            {Math.abs(elementSum - 100) < 0.01 ? '✓ 100%' : `${(elementSum-100)>0?'+':''}${formatCompact(elementSum-100)} off`}
+          </span>
+        </div>
+
+        {/* Delta Summary box */}
+        <div className="flex flex-col items-center gap-0.5 shrink-0">
+          <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Δ {primKey}</span>
+          <div className={`w-24 h-10 rounded-lg border-2 flex items-center justify-center select-none pointer-events-none ${
+            primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'high'
+              ? 'bg-red-50 border-red-300'
+              : primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'mid'
+                ? 'bg-amber-50 border-amber-300'
+                : 'bg-slate-50 border-slate-300'
+          }`}>
+            <span className={`text-lg font-semibold tabular-nums ${
+              primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'high'
+                ? 'text-red-700'
+                : primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'mid'
+                  ? 'text-amber-700'
+                  : 'text-slate-700'
+            }`}>
+              {primaryDeltaRow ? formatSigned(primaryDeltaRow.delta) : '0.000'}
+            </span>
+          </div>
+          <span className={`text-[9px] font-semibold ${
+            primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'high'
+              ? 'text-red-700'
+              : primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'mid'
+                ? 'text-amber-700'
+                : 'text-slate-500'
+          }`}>
+            Deviation
+          </span>
+        </div>
+
+        {/* +/- buttons */}
+        <div className="flex flex-col gap-2 flex-1">
+          <div className="flex gap-1.5">
+            {INCREMENT_STEPS.map(step => (
+              <button key={step.label} onClick={() => applyStep(step)}
+                title={step.snap === 'upper_range' ? `Upper Range (${UPPER_RANGE[sampleCat]}%)` : `+${step.delta}%`}
+                className={`flex-1 h-8 rounded-md text-xs font-semibold border transition-all active:scale-95 shadow-sm ${
+                  step.snap
+                    ? 'border-[#1a73ca] bg-[#1a73ca] text-white hover:bg-[#1a73ca]'
+                    : 'border-slate-400 bg-white text-slate-900 hover:bg-slate-100'
+                }`}>
+                {step.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1.5">
+            {DECREMENT_STEPS.map(step => (
+              <button key={step.label} onClick={() => applyStep(step)}
+                title={step.snap === 'upper_limit' ? `Upper Limit (${UPPER_LIMIT[sampleCat]}%)` : `${step.delta}%`}
+                className={`flex-1 h-8 rounded-md text-xs font-semibold border transition-all active:scale-95 shadow-sm ${
+                  step.snap
+                    ? 'border-[#1a73ca] bg-[#1a73ca] text-white hover:bg-[#1a73ca]'
+                    : 'border-slate-400 bg-white text-slate-900 hover:bg-slate-100'
+                }`}>
+                {step.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ALL ELEMENTS — 3 columns */}
+      <div className="mt-3 border-t border-slate-700 pt-3">
+        <p className="text-sm font-semibold text-slate-700 mb-2">ALL ELEMENTS</p>
+        <div className="grid grid-cols-3 gap-x-4 gap-y-1">
+          {elementGroupsForDisplay.map((group, gi) => (
+            <div key={gi} className="flex flex-col gap-1">
+              {group.map(fullName => {
+                const sym = nameToSym[fullName] || fullName
+                const val = elementValues[sym] ?? 0
+                const locked = NON_EDITABLE_ELEMENTS.has(sym) || sym === primKey
+                const isPowder = POWDER_ELEMENTS.has(sym)
+                const isRed = val < 0 || (isPowder && val > 0)
+                
+                return (
+                  <div key={sym} className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold w-28 shrink-0 text-slate-700">
+                      {fullName} ({sym.toUpperCase()})
+                    </span>
+                    <input
+                      type="number" step="0.001" readOnly={locked}
+                      value={elementDrafts[sym] ?? formatCompact(val)}
+                      onChange={e => {
+                        if (locked) return
+                        const raw = e.target.value
+                        setElementDrafts(prev => ({ ...prev, [sym]: raw }))
+                        handleElementChange(sym, raw)
+                      }}
+                      onBlur={() => {
+                        setElementDrafts(prev => {
+                          const next = { ...prev }
+                          delete next[sym]
+                          return next
+                        })
+                      }}
+                      className={`flex-1 min-w-0 text-center border rounded-md px-1 py-1 text-sm font-medium tabular-nums
+                        focus:outline-none focus:ring-1 focus:ring-amber-500 transition-colors
+                        ${ isRed
+                            ? 'border-red-700 bg-red-900/30 text-red-400'
+                            : 'border-slate-600 bg-slate-700 text-slate-200 hover:border-amber-500'
+                        }`}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
