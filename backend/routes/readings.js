@@ -1,5 +1,6 @@
 /**
  * REST API routes — Readings
+ * Fully optimized to return all 24 explicit element columns and alias x1 as karat for the UI.
  */
 
 'use strict';
@@ -11,8 +12,13 @@ const { getDb } = require('../db/database');
 // GET /api/readings — all readings, newest first
 router.get('/', (req, res) => {
   const db = getDb();
+  
   const rows = db.prepare(`
-    SELECT id, arrived_at, nbr, profile, block, elements_json
+    SELECT id, arrived_at, nbr, serial_number, reading_date, reading_time, 
+           block, customer_name, sample_type, weight, profile, file_path, entry_index,
+           Au, Ag, Cu, Zn, Ni, Cd, In, Ir, Ru, Rh, Pd, Fe, Pt, Os, Re, Co, Ga, Sn, Pb, Bi, W, Sb, mq,
+           x1 AS karat,
+           elements_json
     FROM readings
     ORDER BY id DESC
     LIMIT 500
@@ -25,61 +31,90 @@ router.get('/', (req, res) => {
 });
 
 // GET /api/readings/suggest-group
-// Returns IDs of unlinked readings that most likely belong to the same sample.
-// Strategy 1: group by @BLK block number (most recent block).
-// Strategy 2: time-proximity cluster — readings within 3 minutes of each other.
 router.get('/suggest-group', (req, res) => {
   const db = getDb();
 
-  // Only consider readings not yet linked to any sample
   const rows = db.prepare(`
-    SELECT r.id, r.arrived_at, r.nbr, r.block, r.profile
+    SELECT r.id, r.arrived_at, r.serial_number, r.nbr, r.block, r.profile, r.file_path, r.entry_index
     FROM readings r
     LEFT JOIN sample_readings sr ON sr.reading_id = r.id
     WHERE sr.reading_id IS NULL
     ORDER BY r.id ASC
   `).all();
 
-  if (rows.length === 0) return res.json({ suggestedIds: [], reason: 'No unlinked readings' });
-
-  // Strategy 1: block number
-  const withBlock = rows.filter(r => r.block !== null);
-  if (withBlock.length > 0) {
-    const latestBlock = withBlock[withBlock.length - 1].block;
-    const group = withBlock.filter(r => r.block === latestBlock);
-    return res.json({ suggestedIds: group.map(r => r.id), reason: `Same block #${latestBlock}` });
+  if (rows.length === 0) {
+    return res.json({ suggestedIds: [], reason: 'No unlinked readings available' });
   }
 
-  // Strategy 2: time-proximity — find the most recent cluster (≤ 3 min gap)
-  const THREE_MIN = 3 * 60 * 1000;
-  const sorted = rows.slice().sort((a, b) => new Date(a.arrived_at) - new Date(b.arrived_at));
+  // STRATEGY 1: Group by explicit file tracking target
+  const withFilePath = rows.filter(r => r.file_path !== null && r.file_path !== '');
+  if (withFilePath.length > 0) {
+    const latestFileSignature = withFilePath[withFilePath.length - 1].file_path;
+    const fileGroup = withFilePath.filter(r => r.file_path === latestFileSignature);
+    const cleanFileName = latestFileSignature.split(/[/\\]/).pop();
+    
+    return res.json({ 
+      suggestedIds: fileGroup.map(r => r.id), 
+      reason: `Grouped via unlinked batch file: "${cleanFileName}"` 
+    });
+  }
+
+  // STRATEGY 2: Fallback to block identifiers
+  const withBlock = rows.filter(r => r.block !== null && r.block !== '');
+  if (withBlock.length > 0) {
+    const latestBlockString = withBlock[withBlock.length - 1].block;
+    const blockGroup = withBlock.filter(r => r.block === latestBlockString);
+    return res.json({ 
+      suggestedIds: blockGroup.map(r => r.id), 
+      reason: `Grouped via matching block identifier: #${latestBlockString}` 
+    });
+  }
+
+  // STRATEGY 3: Time-proximity fallback cluster
+  const THREE_MINUTES_MS = 3 * 60 * 1000;
+  const sortedByTime = rows.slice().sort((a, b) => new Date(a.arrived_at) - new Date(b.arrived_at));
 
   const clusters = [];
-  let current = [sorted[0]];
-  for (let i = 1; i < sorted.length; i++) {
-    const gap = new Date(sorted[i].arrived_at) - new Date(sorted[i - 1].arrived_at);
-    if (gap <= THREE_MIN) {
-      current.push(sorted[i]);
+  let currentCluster = [sortedByTime[0]];
+
+  for (let i = 1; i < sortedByTime.length; i++) {
+    const timeDelta = new Date(sortedByTime[i].arrived_at) - new Date(sortedByTime[i - 1].arrived_at);
+    if (timeDelta <= THREE_MINUTES_MS) {
+      currentCluster.push(sortedByTime[i]);
     } else {
-      clusters.push(current);
-      current = [sorted[i]];
+      clusters.push(currentCluster);
+      currentCluster = [sortedByTime[i]];
     }
   }
-  clusters.push(current);
+  clusters.push(currentCluster);
 
-  const latest = clusters[clusters.length - 1];
+  const latestClusterGroup = clusters[clusters.length - 1];
   res.json({
-    suggestedIds: latest.map(r => r.id),
-    reason: `${latest.length} reading${latest.length > 1 ? 's' : ''} within 3-min window`,
+    suggestedIds: latestClusterGroup.map(r => r.id),
+    reason: `${latestClusterGroup.length} measurement line reading${latestClusterGroup.length > 1 ? 's' : ''} captured within a 3-minute window`,
   });
 });
 
 // GET /api/readings/:id
 router.get('/:id', (req, res) => {
   const db = getDb();
-  const row = db.prepare(`SELECT * FROM readings WHERE id = ?`).get(req.params.id);
-  if (!row) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...row, elements: JSON.parse(row.elements_json), raw: JSON.parse(row.raw_json) });
+  const row = db.prepare(`
+    SELECT id, arrived_at, nbr, serial_number, reading_date, reading_time, 
+           block, customer_name, sample_type, weight, profile, file_path, entry_index,
+           Au, Ag, Cu, Zn, Ni, Cd, In, Ir, Ru, Rh, Pd, Fe, Pt, Os, Re, Co, Ga, Sn, Pb, Bi, W, Sb, mq,
+           x1 AS karat,
+           elements_json, raw_json
+    FROM readings 
+    WHERE id = ?
+  `).get(req.params.id);
+  
+  if (!row) return res.status(404).json({ error: 'Reading record not found' });
+  
+  res.json({ 
+    ...row, 
+    elements: JSON.parse(row.elements_json), 
+    raw: JSON.parse(row.raw_json) 
+  });
 });
 
 module.exports = router;

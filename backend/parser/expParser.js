@@ -1,142 +1,119 @@
 /**
- * WinFTM® .exp file parser
- * Format: tab-separated values, CRLF line endings, sections delimited by empty lines
- * Three section types: Header (@CAL, @PRN, etc.), Single Readings (@NBR, @VA1...), Block Stats (@BLK, @MW1...)
+ * Modern WinFTM® JSON Block & Element Parser
+ * Gracefully isolates curly brace blocks and repairs broken/malformed WinFTM JSON elements.
  */
 
 'use strict';
 
 /**
- * Parse a complete .exp file string into structured JavaScript objects.
- * @param {string} rawText - Full contents of the .exp file (UTF-8 or ASCII)
- * @returns {{ readings: object[], blockStats: object[], header: object }}
+ * Extracts individual curly-brace blocks from a file and runs pre-parsing repairs.
+ * Handles missing quotes, unquoted strings, blank keys, and broken hyphen states.
+ * @param {string} rawContent - The raw text contents read from the log file
+ * @returns {Array<Object>} Array of clean parsed JavaScript objects
  */
-function parseExpFile(rawText) {
-  // Normalise line endings
-  const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const lines = text.split('\n');
+function parseJsonEntries(rawContent) {
+  if (!rawContent || !rawContent.trim()) {
+    return [];
+  }
 
-  const header = {};
-  const readings = [];
-  const blockStats = [];
+  const extractedEntries = [];
+  let openBraces = 0;
+  let currentBlockStart = -1;
 
-  // Split into sections separated by blank lines
-  const sections = [];
-  let current = [];
-  for (const line of lines) {
-    if (line.trim() === '') {
-      if (current.length > 0) {
-        sections.push(current);
-        current = [];
+  // Step 1: Scan for standalone curly-brace bounding blocks
+  for (let i = 0; i < rawContent.length; i++) {
+    const char = rawContent[i];
+
+    if (char === '{') {
+      if (openBraces === 0) {
+        currentBlockStart = i;
       }
-    } else {
-      current.push(line);
+      openBraces++;
+    } else if (char === '}') {
+      openBraces--;
+      if (openBraces === 0 && currentBlockStart !== -1) {
+        const rawJsonBlock = rawContent.substring(currentBlockStart, i + 1);
+        
+        // Step 2: Sanitize and repair the structural malformations
+        const cleanedJsonString = sanitizeWinFtmJson(rawJsonBlock);
+        
+        if (cleanedJsonString) {
+          try {
+            const parsedObj = JSON.parse(cleanedJsonString);
+            extractedEntries.push(parsedObj);
+          } catch (e) {
+            console.error(`[Parser] Failed to parse sub-block extraction candidate: ${e.message}`);
+          }
+        }
+        currentBlockStart = -1;
+      }
     }
   }
-  if (current.length > 0) sections.push(current);
 
-  for (const section of sections) {
-    const fields = parseSectionFields(section);
-    if (!fields || Object.keys(fields).length === 0) continue;
-
-    if ('@CAL' in fields || '@PRN' in fields) {
-      // Header section
-      Object.assign(header, fields);
-    } else if ('@BLK' in fields) {
-      // Block statistics section
-      blockStats.push(fields);
-    } else if ('@NBR' in fields) {
-      // Single reading section
-      readings.push(fields);
-    }
-  }
-
-  return { header, readings, blockStats };
+  return extractedEntries;
 }
 
 /**
- * Parse one section (array of lines) into a key→value object.
- * Lines are tab-separated: key\tvalue
+ * Performs rigorous string cleaning to prevent JSON syntax parser faults.
+ * @param {string} rawBlockStr - A single isolated chunk of JSON string candidate
+ * @returns {string|null} Cleaned JSON string, or null if unresolvable
  */
-function parseSectionFields(lines) {
-  const fields = {};
-  for (const line of lines) {
-    const tabIdx = line.indexOf('\t');
-    if (tabIdx === -1) continue;
-    const key = line.substring(0, tabIdx).trim();
-    const value = line.substring(tabIdx + 1).trim();
-    if (key) fields[key] = parseValue(value);
-  }
-  return fields;
+function sanitizeWinFtmJson(rawBlockStr) {
+  let cleaned = rawBlockStr;
+
+  // 1. Repair unquoted SerialNumbers (e.g. "SerialNumber":IN00006490, -> "SerialNumber":"IN00006490",)
+  cleaned = cleaned.replace(/"SerialNumber"\s*:\s*([A-Za-z0-9]+)\s*,/g, '"SerialNumber":"$1",');
+
+  // 2. Erase completely blank unmeasured structural properties completely 
+  // Captures structural noise across FINE, PURE, SILVER & TUNCH profiles: "":{"Value":,"Unit":"","State":},
+  cleaned = cleaned.replace(/"":\s*\{\s*"Value"\s*:\s*,\s*"Unit"\s*:\s*""\s*,\s*"State"\s*:\s*\}\s*,?/g, '');
+
+  // 3. Clean up loose stray element blocks with blank keys that miss values inside trailing spaces
+  cleaned = cleaned.replace(/"":\s*\{\s*"Value"\s*:\s*.*\}\s*,?/g, '');
+
+  // 4. Substitute naked unquoted hyphens with a clean fallback numeric representation or null
+  // Handles the common out-of-bounds pattern: "Value": --------, -> "Value": 0.000,
+  cleaned = cleaned.replace(/"Value"\s*:\s*-+\s*,/g, '"Value": 0.000,');
+
+  // 5. Clean up any invalid trailing commas that might have been left over right before closing structures
+  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+
+  // Safety fallback verification check
+  const trimmed = cleaned.trim();
+  if (!trimmed || trimmed === '{}') return null;
+
+  return cleaned;
 }
 
 /**
- * Attempt to convert a string value to a number if it looks like one.
+ * Normalizes element lists, cleaning up padded strings and removing empty keys.
+ * @param {Object} rawElements - The elements dictionary tree extracted from JSON
+ * @returns {Array<Object>} Clean array of object parameters ready for relational databases
  */
-function parseValue(str) {
-  if (str === '' || str === null || str === undefined) return null;
-  // WinFTM uses decimal point (never comma) for numbers
-  const n = Number(str);
-  if (!isNaN(n) && str.trim() !== '') return n;
-  return str;
-}
+function normaliseElements(rawElements) {
+  if (!rawElements) return [];
+  
+  const results = [];
+  
+  Object.keys(rawElements).forEach((key) => {
+    const cleanKey = key.trim();
+    
+    // Completely ignore blank properties from saving into SQLite
+    if (!cleanKey) return;
 
-/**
- * Convert a parsed reading object to a flat, application-friendly format.
- * Extracts up to 20 element channels (VA1–VA20 / element names EL1–EL20).
- * @param {object} raw - Raw parsed reading fields
- * @param {object} header - Parsed header fields (provides element names)
- * @returns {object} Normalised reading
- */
-function normaliseReading(raw, header = {}) {
-  const elements = [];
-  for (let i = 1; i <= 20; i++) {
-    const key = `@VA${i}`;
-    const nameKey = `@EL${i}`;
-    if (!(key in raw)) break;
-    if (raw[key] === null || raw[key] === undefined) break;
-    elements.push({
-      index: i,
-      name: header[nameKey] || `Element${i}`,
-      value: raw[key],
+    const data = rawElements[key];
+    results.push({
+      element: cleanKey,
+      value: data.Value !== undefined && data.Value !== null ? Number(data.Value) : 0.0,
+      unit: data.Unit ? data.Unit.trim() : '%',
+      state: data.State !== undefined ? Number(data.State) : 1
     });
-  }
+  });
 
-  return {
-    nbr: raw['@NBR'] ?? null,
-    profile: raw['@PRF'] ?? null,
-    timestamp: null, // WinFTM does not embed timestamp in .exp; set by watcher on arrival
-    elements,
-    raw,
-  };
+  return results;
 }
 
-/**
- * Convert a parsed block stats object to a flat format.
- */
-function normaliseBlockStats(raw, header = {}) {
-  const means = [];
-  const stddevs = [];
-  for (let i = 1; i <= 20; i++) {
-    const mKey = `@MW${i}`;
-    const sKey = `@S_${i}`;
-    const nameKey = `@EL${i}`;
-    if (!(mKey in raw) && !(sKey in raw)) break;
-    means.push({
-      index: i,
-      name: header[nameKey] || `Element${i}`,
-      mean: raw[mKey] ?? null,
-      stddev: raw[sKey] ?? null,
-    });
-  }
-
-  return {
-    block: raw['@BLK'] ?? null,
-    count: raw['@ANB'] ?? null,
-    lot: raw['@LOT'] ?? null,
-    means,
-    raw,
-  };
-}
-
-module.exports = { parseExpFile, normaliseReading, normaliseBlockStats };
+module.exports = {
+  parseJsonEntries,
+  normaliseElements
+};

@@ -1,5 +1,5 @@
 /**
- * SQLite database setup and schema
+ * SQLite database setup and schema - Flattened Element Architecture Upgrade
  * Single file: goldscope-data.db
  */
 
@@ -23,110 +23,115 @@ function getDb() {
 }
 
 function initialise(db) {
+  // 1. Core Flattened Schema Setup (Logically Sequenced with 3-Way Composite Constraint)
   db.exec(`
-    -- ---------------------------------------------------------------
-    -- Raw readings received directly from WinFTM .exp export
-    -- These are NEVER deleted or modified after insertion.
-    -- ---------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS readings (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      arrived_at  TEXT    NOT NULL,          -- ISO-8601 timestamp when we received it
-      nbr         INTEGER,                   -- @NBR from WinFTM
-      profile     TEXT,                      -- @PRF (alloy/product type)
-      block       INTEGER,                   -- @BLK if available
-      elements_json TEXT NOT NULL,           -- JSON array of {name, value} per element
-      raw_json    TEXT NOT NULL              -- Full raw key→value object for audit
+      -- 1. Identifiers & File System Trackers
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      arrived_at    TEXT    NOT NULL,
+      file_path     TEXT    NOT NULL,
+      block         TEXT,
+      entry_index   INTEGER NOT NULL,
+      profile       TEXT,
+
+      -- 2. Context Metadata & Physical Specs
+      serial_number TEXT,
+      reading_date  TEXT,
+      reading_time  TEXT,
+      customer_name TEXT,
+      sample_type   TEXT,
+      weight        REAL,
+      
+      -- 3. Flattened Material Element Name Columns (Safely Quoted)
+      "Au" REAL DEFAULT 0.0, "Ag" REAL DEFAULT 0.0, "Cu" REAL DEFAULT 0.0,
+      "Zn" REAL DEFAULT 0.0, "Ni" REAL DEFAULT 0.0, "Cd" REAL DEFAULT 0.0,
+      "In" REAL DEFAULT 0.0, "Ir" REAL DEFAULT 0.0, "Ru" REAL DEFAULT 0.0,
+      "Rh" REAL DEFAULT 0.0, "Pd" REAL DEFAULT 0.0, "Fe" REAL DEFAULT 0.0,
+      "Pt" REAL DEFAULT 0.0, "Os" REAL DEFAULT 0.0, "Re" REAL DEFAULT 0.0,
+      "Co" REAL DEFAULT 0.0, "Ga" REAL DEFAULT 0.0, "Sn" REAL DEFAULT 0.0,
+      "Pb" REAL DEFAULT 0.0, "Bi" REAL DEFAULT 0.0, "W"  REAL DEFAULT 0.0,
+      "Sb" REAL DEFAULT 0.0, "mq" REAL DEFAULT 0.0, "x1" REAL DEFAULT 0.0,
+
+      -- 4. Backup Parse Dumps
+      elements_json TEXT    NOT NULL,
+      raw_json      TEXT    NOT NULL,
+      
+      -- 👑 ENHANCED DATA INTEGRITY GUARD: Multi-column composite safety check
+      UNIQUE(file_path, block, entry_index)
     );
 
-    -- ---------------------------------------------------------------
-    -- Samples (jobs) — one per physical customer item
-    -- ---------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS samples (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      job_ref       TEXT    NOT NULL UNIQUE, -- e.g. JOB-2026-001
+      job_ref       TEXT    NOT NULL UNIQUE,
       customer_name TEXT,
       item_desc     TEXT,
       test_date     TEXT,
       created_at    TEXT    NOT NULL,
-      updated_at    TEXT,                    -- ISO-8601 timestamp of last modification
+      updated_at    TEXT,
       status        TEXT    NOT NULL DEFAULT 'pending_review',
-                              -- pending_review | expert_review | approved | report_generated
       approved_by   TEXT,
       approved_at   TEXT,
       expert_notes  TEXT
     );
 
-    -- ---------------------------------------------------------------
-    -- Link table: which readings belong to which sample
-    -- ---------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS sample_readings (
       sample_id   INTEGER NOT NULL REFERENCES samples(id),
       reading_id  INTEGER NOT NULL REFERENCES readings(id),
-      excluded    INTEGER NOT NULL DEFAULT 0, -- 1 = excluded by expert
+      excluded    INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (sample_id, reading_id)
     );
 
-    -- ---------------------------------------------------------------
-    -- Auto-calculated suggestion stored at time of selection
-    -- One row per sample, per element
-    -- ---------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS auto_results (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       sample_id   INTEGER NOT NULL REFERENCES samples(id),
       element     TEXT    NOT NULL,
-      auto_value  REAL,                      -- plain average of selected readings
+      auto_value  REAL,
       UNIQUE (sample_id, element)
     );
 
-    -- ---------------------------------------------------------------
-    -- Expert's final approved values
-    -- One row per sample, per element
-    -- ---------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS final_results (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       sample_id     INTEGER NOT NULL REFERENCES samples(id),
       element       TEXT    NOT NULL,
-      auto_value    REAL,                    -- snapshot of auto_value at approval time
-      expert_value  REAL,                    -- expert's final value (may equal auto_value)
+      auto_value    REAL,
+      expert_value  REAL,
       UNIQUE (sample_id, element)
     );
 
-    -- ---------------------------------------------------------------
-    -- Audit log — append-only
-    -- ---------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS audit_log (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       occurred_at TEXT    NOT NULL,
       sample_id   INTEGER REFERENCES samples(id),
       reading_id  INTEGER REFERENCES readings(id),
-      action      TEXT    NOT NULL,          -- e.g. READING_RECEIVED, SAMPLE_CREATED, EXPERT_OVERRIDE, APPROVED, REPORT_GENERATED
-      actor       TEXT,                      -- user who performed the action
-      detail_json TEXT                       -- additional context as JSON
+      action      TEXT    NOT NULL,
+      actor       TEXT,
+      detail_json TEXT
     );
 
-    -- ---------------------------------------------------------------
-    -- Reports — metadata for generated PDFs
-    -- ---------------------------------------------------------------
     CREATE TABLE IF NOT EXISTS reports (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       sample_id     INTEGER NOT NULL REFERENCES samples(id),
       generated_at  TEXT    NOT NULL,
       file_path     TEXT    NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_readings_arrived ON readings (arrived_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_occurred ON audit_log (occurred_at DESC);
   `);
 
-  // ── Migration: add updated_at to existing samples tables ──────────────────
-  try {
-    db.exec(`ALTER TABLE samples ADD COLUMN updated_at TEXT`);
-  } catch (_) {
-    // Column already exists — safe to ignore
-  }
+  // 2. Comprehensive Zero-Downtime Migration Block
+  const targetColumns = [
+    'file_path', 'block', 'entry_index', 'profile', 'serial_number', 'reading_date', 'reading_time', 'customer_name', 'sample_type', 'weight',
+    'Au', 'Ag', 'Cu', 'Zn', 'Ni', 'Cd', 'In', 'Ir', 'Ru', 'Rh', 'Pd', 'Fe', 
+    'Pt', 'Os', 'Re', 'Co', 'Ga', 'Sn', 'Pb', 'Bi', 'W', 'Sb', 'mq', 'x1'
+  ];
 
-  try {
-    db.exec(`ALTER TABLE samples ADD COLUMN test_date TEXT`);
-  } catch (_) {
-    // Column already exists — safe to ignore
-  }
+  targetColumns.forEach(col => {
+    try {
+      const type = (col === 'weight' || ['serial_number', 'reading_date', 'reading_time', 'customer_name', 'sample_type', 'profile', 'file_path', 'entry_index', 'block'].indexOf(col) === -1) ? 'REAL DEFAULT 0.0' : 'TEXT';
+      db.exec(`ALTER TABLE readings ADD COLUMN "${col}" ${type}`);
+    } catch (_) {}
+  });
 }
 
 module.exports = { getDb };

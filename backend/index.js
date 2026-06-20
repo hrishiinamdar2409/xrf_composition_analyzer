@@ -17,26 +17,44 @@ const createSettingsRouter = require('./routes/settings');
 const auditRouter = require('./routes/audit');
 
 const PORT = process.env.PORT || 3001;
-//const CONFIG_PIN = String(process.env.GOLDSCOPE_CONFIG_PIN || '2580');
 
 const app = express();
 app.use(express.json());
 
-// function requireConfigPin(req, res, next) {
-//   const supplied = String(req.get('x-config-pin') || '');
-//   if (!supplied || supplied !== CONFIG_PIN) {
-//     return res.status(401).json({ error: 'Configuration access denied' });
-//   }
-//   return next();
-// }
+// Fallback path configuration root tracking parameter
+let activeExpFilePath = 'C:\\FischerExport';
 
-let activeExpFilePath = 'C:\\FischerExport\\results.exp';
+/**
+ * Normalizes input targets and activates recursive watcher surveillance 
+ * across targeted product subdirectory paths.
+ */
 const applyExpFileWatcher = (nextPath) => {
   activeExpFilePath = nextPath;
-  startWatcher(activeExpFilePath, (reading) => {
+  
+  const fs = require('fs');
+  let watchTargetDirectory = activeExpFilePath;
+
+  // CRITICAL FIX: If configuration targets an explicit file path handle, 
+  // safely extract the parent root directory context instead.
+  try {
+    if (fs.existsSync(activeExpFilePath) && fs.statSync(activeExpFilePath).isFile()) {
+      watchTargetDirectory = path.dirname(activeExpFilePath);
+    } else if (path.extname(activeExpFilePath)) {
+      // If path does not exist yet but ends with a file suffix extension name
+      watchTargetDirectory = path.dirname(activeExpFilePath);
+    }
+  } catch (_) {
+    if (path.extname(activeExpFilePath)) {
+      watchTargetDirectory = path.dirname(activeExpFilePath);
+    }
+  }
+
+  // Initialize tree watcher surveillance
+  startWatcher(watchTargetDirectory, (reading) => {
     broadcastNewReading(reading);
   });
-  console.log(`[Server] Reconfigured export watcher path: ${activeExpFilePath}`);
+  
+  console.log(`[Server] Watcher reinitialized. Watching directory tree: ${watchTargetDirectory}`);
 };
 
 const settingsRouter = createSettingsRouter({
