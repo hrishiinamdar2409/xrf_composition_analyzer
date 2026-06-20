@@ -43,10 +43,9 @@ export const ELEMENT_NAMES = {
 
 // Fixed ordered columns for the readings table
 export const READING_COLUMNS = [
-  'Au',
-  'Ag', 'Cu', 'Zn', 'Cd', 'Ni', 'In',
-  'Fe', 'Sn', 'Ir', 'Ru', 'Os', 'Re',
-  'Co', 'Pb', 'Cr', 'Pt', 'Pd', 'Rh',
+  'Au', 'Ag', 'Cu', 'Zn', 'Ni', 'Cd', 'In', 
+  'Ir', 'Ru', 'Rh', 'Pd', 'Fe', 'Pt', 'Os', 
+  'Re', 'Co', 'Ga', 'Sn', 'Pb', 'Bi', 'W', 'Sb', 'mq'
 ]
 
 export const ALL_ELEMENT_GROUPS = [
