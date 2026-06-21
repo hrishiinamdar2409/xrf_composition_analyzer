@@ -438,4 +438,4 @@ export default function SettingsPage() {
       )}
     </div>
   )
-}/api/settings/browse-exp
+}

@@ -70,36 +70,31 @@ function browseExpFolder(currentPath = '') {
   return new Promise((resolve, reject) => {
     const safeCurrent = String(currentPath || '').replace(/'/g, "''");
     
-    // Modern Windows Explorer Dialog - Forces New resizable UI structure and pushes window to foreground
+    // Modern Windows Shell UI dialog layout wrapper (resizable, sidebar shortcut support)
     const script = `
-      Add-Type -AssemblyName System.Windows.Forms
-      [System.Windows.Forms.Application]::EnableVisualStyles()
-      
-      $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-      $dialog.Description = "Select WinFTM Export Folder"
-      $dialog.ShowNewFolderButton = $true
-      
+      $initialDir = ''
       if ('${safeCurrent}') {
-        if (Test-Path -LiteralPath '${safeCurrent}') {
-          $item = Get-Item -LiteralPath '${safeCurrent}' -ErrorAction SilentlyContinue
-          if ($item.PSIsContainer) { $dialog.SelectedPath = $item.FullName }
-          else { $dialog.SelectedPath = (Split-Path -Parent $item.FullName) }
-        }
+        try {
+          if (Test-Path -LiteralPath '${safeCurrent}') {
+            $item = Get-Item -LiteralPath '${safeCurrent}' -ErrorAction SilentlyContinue
+            if ($item.PSIsContainer) {
+              $initialDir = $item.FullName
+            } else {
+              $initialDir = Split-Path -Parent $item.FullName
+            }
+          }
+        } catch {}
       }
       
-      # Force popup window layout directly to foreground on top of background engine
-      $topWindow = New-Object System.Windows.Forms.Form
-      $topWindow.TopMost = $true
+      $shell = New-Object -ComObject Shell.Application
+      # 0x00000010 (BIF_EDITBOX) + 0x00000040 (BIF_USENEWUI) creates the modern window framework
+      $folder = $shell.BrowseForFolder(0, "Select WinFTM Export Folder:", 0x00000010 -bor 0x00000040, $initialDir)
       
-      $result = $dialog.ShowDialog($topWindow)
-      
-      if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        Write-Output $dialog.SelectedPath
+      if ($folder) {
+        Write-Output $folder.Self.Path
       } else {
         Write-Output ""
       }
-      $topWindow.Dispose()
-      $dialog.Dispose()
     `;
 
     execFile(
