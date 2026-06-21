@@ -124,8 +124,8 @@ export default function SettingsPage() {
     const exp = String(draft?.expFilePath || '').trim()
     const printer = String(draft?.printerName || '').trim()
 
-    if (!/^[a-zA-Z]:\\/.test(exp)) next.expFilePath = 'Use an absolute Windows path (e.g. C:\\FischerExport\\results.exp).'
-    else if (!exp.toLowerCase().endsWith('.exp')) next.expFilePath = 'Export file must end with .exp'
+    // Validates absolute Windows path (e.g. C:\Folder) without requiring a specific file extension
+    if (!/^[a-zA-Z]:\\/.test(exp)) next.expFilePath = 'Use an absolute Windows directory path (e.g. C:\\FischerExport).'
     else if (exp.length > 260) next.expFilePath = 'Path is too long (max 260 characters).'
 
     if (!printer) next.printerName = 'Please select a printer.'
@@ -186,7 +186,7 @@ export default function SettingsPage() {
     }
     
     setBrowsing(true)
-    toast.loading('Opening file browser...', { id: 'browse' })
+    toast.loading('Opening folder browser...', { id: 'browse' })
     
     try {
       const currentPath = draft?.expFilePath || ''
@@ -195,7 +195,8 @@ export default function SettingsPage() {
       const response = await fetch(API.browse, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPath }),
+        // Explicitly requesting directory mode from your backend file picker
+        body: JSON.stringify({ currentPath, mode: 'directory' }),
       })
       
       console.log('Response status:', response.status)
@@ -214,20 +215,20 @@ export default function SettingsPage() {
       }
       
       if (!data.cancelled && data.path) {
-        console.log('Selected path:', data.path)
+        console.log('Selected directory path:', data.path)
         update('expFilePath', data.path)
         clearError('expFilePath')
-        toast.success('File path selected', { id: 'browse' })
+        toast.success('Folder path selected', { id: 'browse' })
       } else if (data.cancelled) {
         console.log('User cancelled browsing')
         toast('Selection cancelled', { id: 'browse', icon: '📁' })
       } else {
         console.log('No path returned')
-        toast.error('No file selected', { id: 'browse' })
+        toast.error('No folder selected', { id: 'browse' })
       }
     } catch (err) {
       console.error('Browse error:', err)
-      toast.error(err.message || 'Could not open file browser', { id: 'browse' })
+      toast.error(err.message || 'Could not open folder browser', { id: 'browse' })
     } finally {
       setBrowsing(false)
     }
@@ -271,7 +272,7 @@ export default function SettingsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-800">System Configuration</h1>
-          <p className="text-xs text-slate-500">Manage the WinFTM export source and the print destination.</p>
+          <p className="text-xs text-slate-500">Manage the WinFTM export directory and the print destination.</p>
         </div>
         <div className="flex items-center gap-2">
           <StatusPill tone="success">Configured</StatusPill>
@@ -291,7 +292,7 @@ export default function SettingsPage() {
         }
       >
         <div className="divide-y divide-slate-100">
-          <SummaryRow label="Export File" value={settings.expFilePath || 'Not set'} mono missing={!settings.expFilePath} />
+          <SummaryRow label="Export Folder" value={settings.expFilePath || 'Not set'} mono missing={!settings.expFilePath} />
           <SummaryRow label="Printer" value={settings.printerName || 'Not selected'} missing={!settings.printerName} />
         </div>
 
@@ -322,13 +323,13 @@ export default function SettingsPage() {
         </div>
       </SectionCard>
 
-      {/* Export file */}
+      {/* Export Folder */}
       <SectionCard
-        title="WinFTM Export File"
-        description="Path the system watches for new measurement readings."
+        title="WinFTM Export Directory"
+        description="The folder path the system watches for incoming measurement files."
       >
         <div>
-          <label htmlFor="exp-path" className="text-xs font-semibold text-slate-600">Path to .exp export file</label>
+          <label htmlFor="exp-path" className="text-xs font-semibold text-slate-600">Path to export folder</label>
           <div className="mt-1 flex items-stretch gap-2">
             <input
               id="exp-path"
@@ -337,7 +338,7 @@ export default function SettingsPage() {
               onChange={e => { update('expFilePath', e.target.value); clearError('expFilePath') }}
               disabled={!isEditing}
               aria-invalid={Boolean(errors.expFilePath)}
-              placeholder="C:\FischerExport\results.exp"
+              placeholder="C:\FischerExport"
               className={`block w-full rounded-lg border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 transition-colors ${
                 errors.expFilePath
                   ? 'border-red-300 focus:ring-red-300'
@@ -355,7 +356,7 @@ export default function SettingsPage() {
           </div>
           {errors.expFilePath
             ? <p className="mt-1 text-xs text-red-600">{errors.expFilePath}</p>
-            : <p className="mt-1 text-xs text-slate-400">Must match WinFTM's Online Export path. Example: C:\FischerExport\results.exp</p>}
+            : <p className="mt-1 text-xs text-slate-400">Must match WinFTM's Online Export directory. Example: C:\FischerExport</p>}
         </div>
       </SectionCard>
 
@@ -437,4 +438,4 @@ export default function SettingsPage() {
       )}
     </div>
   )
-}
+}/api/settings/browse-exp

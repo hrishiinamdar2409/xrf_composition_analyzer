@@ -1,5 +1,5 @@
 /**
- * REST API routes — Settings (export file path, business branding)
+ * REST API routes — Settings (export directory path, business branding)
  */
 
 'use strict';
@@ -11,7 +11,7 @@ const { execFile } = require('child_process');
 
 const SETTINGS_PATH = path.join(__dirname, '..', '..', 'settings.json');
 const DEFAULT_SETTINGS = {
-  expFilePath: 'C:\\FischerExport\\results.exp',
+  expFilePath: 'C:\\FischerExport',
   printerName: '',
 };
 
@@ -66,46 +66,40 @@ function listAvailablePrinters() {
   });
 }
 
-function browseExpFile(currentPath = '') {
+function browseExpFolder(currentPath = '') {
   return new Promise((resolve, reject) => {
     const safeCurrent = String(currentPath || '').replace(/'/g, "''");
     
-    // Improved PowerShell script using Windows Forms instead of Shell.Application
+    // Modern Windows Explorer Dialog - Forces New resizable UI structure and pushes window to foreground
     const script = `
       Add-Type -AssemblyName System.Windows.Forms
+      [System.Windows.Forms.Application]::EnableVisualStyles()
       
-      $initialDir = ''
+      $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+      $dialog.Description = "Select WinFTM Export Folder"
+      $dialog.ShowNewFolderButton = $true
+      
       if ('${safeCurrent}') {
-        try {
-          if (Test-Path -LiteralPath '${safeCurrent}') {
-            $item = Get-Item -LiteralPath '${safeCurrent}' -ErrorAction SilentlyContinue
-            if ($item.PSIsContainer) {
-              $initialDir = $item.FullName
-            } else {
-              $initialDir = Split-Path -Parent $item.FullName
-            }
-          }
-        } catch {
-          $initialDir = [Environment]::GetFolderPath('Desktop')
+        if (Test-Path -LiteralPath '${safeCurrent}') {
+          $item = Get-Item -LiteralPath '${safeCurrent}' -ErrorAction SilentlyContinue
+          if ($item.PSIsContainer) { $dialog.SelectedPath = $item.FullName }
+          else { $dialog.SelectedPath = (Split-Path -Parent $item.FullName) }
         }
-      } else {
-        $initialDir = [Environment]::GetFolderPath('Desktop')
       }
       
-      $fileDialog = New-Object System.Windows.Forms.OpenFileDialog
-      $fileDialog.InitialDirectory = $initialDir
-      $fileDialog.Filter = "Export files (*.exp)|*.exp|All files (*.*)|*.*"
-      $fileDialog.Title = "Select WinFTM Export File (.exp)"
-      $fileDialog.CheckFileExists = $true
-      $fileDialog.Multiselect = $false
+      # Force popup window layout directly to foreground on top of background engine
+      $topWindow = New-Object System.Windows.Forms.Form
+      $topWindow.TopMost = $true
       
-      $result = $fileDialog.ShowDialog()
+      $result = $dialog.ShowDialog($topWindow)
       
       if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
-        Write-Output $fileDialog.FileName
+        Write-Output $dialog.SelectedPath
       } else {
         Write-Output ""
       }
+      $topWindow.Dispose()
+      $dialog.Dispose()
     `;
 
     execFile(
@@ -119,8 +113,6 @@ function browseExpFile(currentPath = '') {
       (err, stdout, stderr) => {
         if (err) {
           console.error('PowerShell error:', err);
-          console.error('stderr:', stderr);
-          // Return empty string on error (user cancelled or dialog failed)
           resolve('');
           return;
         }
@@ -138,13 +130,11 @@ function validateSettingsPayload(payload) {
 
   const expFilePath = String(payload.expFilePath ?? '').trim();
   if (!expFilePath) {
-    errors.push({ field: 'expFilePath', message: 'Export file path is required.' });
+    errors.push({ field: 'expFilePath', message: 'Export directory path is required.' });
   } else if (!isLikelyWindowsPath(expFilePath)) {
-    errors.push({ field: 'expFilePath', message: 'Use an absolute Windows path (e.g. C:\\FischerExport\\results.exp).' });
-  } else if (!expFilePath.toLowerCase().endsWith('.exp')) {
-    errors.push({ field: 'expFilePath', message: 'Export file must end with .exp' });
+    errors.push({ field: 'expFilePath', message: 'Use an absolute Windows directory path (e.g. C:\\FischerExport).' });
   } else if (expFilePath.length > 260) {
-    errors.push({ field: 'expFilePath', message: 'Export file path is too long (max 260).' });
+    errors.push({ field: 'expFilePath', message: 'Export directory path is too long (max 260).' });
   }
   cleaned.expFilePath = expFilePath;
 
@@ -183,13 +173,13 @@ function createSettingsRouter(options = {}) {
   router.post('/browse-exp', async (req, res) => {
     try {
       const currentPath = String(req.body?.currentPath || '').trim();
-      const selectedPath = await browseExpFile(currentPath);
+      const selectedPath = await browseExpFolder(currentPath);
       if (!selectedPath) {
         return res.json({ ok: true, cancelled: true, path: '' });
       }
       return res.json({ ok: true, cancelled: false, path: selectedPath });
     } catch (err) {
-      return res.status(500).json({ error: 'Could not open file picker', detail: err.message });
+      return res.status(500).json({ error: 'Could not open folder picker', detail: err.message });
     }
   });
 
