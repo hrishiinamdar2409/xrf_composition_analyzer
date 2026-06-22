@@ -166,6 +166,18 @@ export function useReadings() {
         if (!isNaN(dateObj.getTime())) {
           setDate(dateObj.toISOString().slice(0, 10));
         }
+      } else if (firstReading.arrived_at) {
+        // Fallback to arrived_at if reading_date not available
+        const dateObj = new Date(firstReading.arrived_at);
+        if (!isNaN(dateObj.getTime())) {
+          setDate(dateObj.toISOString().slice(0, 10));
+        }
+      } else if (firstReading.created_at) {
+        // Fallback to created_at if reading_date not available
+        const dateObj = new Date(firstReading.created_at);
+        if (!isNaN(dateObj.getTime())) {
+          setDate(dateObj.toISOString().slice(0, 10));
+        }
       } else if (firstReading.created_at) {
         // Fallback to created_at if reading_date not available
         const dateObj = new Date(firstReading.created_at);

@@ -94,10 +94,38 @@ export default function ReadingsTable({
     return 0
   }
 
+  // Helper to format date and time
+  const formatDateTime = (reading) => {
+    if (reading.reading_date && reading.reading_time) {
+      // Format: DD-MM-YYYY HH:MM:SS
+      return `${reading.reading_date} ${reading.reading_time}`
+    }
+    if (reading.arrived_at) {
+      // Fallback to arrived_at if reading_date/time not available
+      try {
+        const date = new Date(reading.arrived_at)
+        if (!isNaN(date.getTime())) {
+          return date.toLocaleString('en-IN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          })
+        }
+      } catch (e) {
+        return reading.arrived_at || '-'
+      }
+    }
+    return '-'
+  }
+
   // Reliable tracking condition for checking if all current visible rows are selected
   const isAllVisibleSelected = sortedReadings.length > 0 && sortedReadings.every(r => selectedReadingIds.has(r.id))
 
-  const totalColumnsCount = 7 + READING_COLUMNS.length
+  const totalColumnsCount = 7 + READING_COLUMNS.length + 1 // Added 1 for Date/Time column at the end
 
   return (
     <div className="flex flex-col gap-3 w-full">
@@ -216,7 +244,9 @@ export default function ReadingsTable({
                 <th className="p-2 text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">SAMPLE TYPE</th>
                 <th className="p-2 text-right text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">WEIGHT</th>
                 <th className="p-2 text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">PROFILE</th>
-                <th className="p-2 text-slate-500 whitespace-nowrap bg-slate-50">FILE</th>
+                <th className="p-2 text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">FILE</th>
+                {/* NEW: Date/Time Column at the end */}
+                <th className="p-2 text-slate-700 whitespace-nowrap bg-slate-50 min-w-[140px]">DATE & TIME</th>
               </tr>
             </thead>
             
@@ -284,8 +314,12 @@ export default function ReadingsTable({
                             <td className="p-2 text-slate-600 font-mono text-xs border-r border-slate-200 uppercase tracking-wide">
                               {r.profile || '-'}
                             </td>
-                            <td className="p-2 text-slate-400 font-mono truncate max-w-[120px]" title={r.file_path}>
+                            <td className="p-2 text-slate-400 font-mono truncate max-w-[120px] border-r border-slate-200" title={r.file_path}>
                               {r.file_path ? r.file_path.split(/[/\\]/).pop() : '-'}
+                            </td>
+                            {/* NEW: Date/Time cell at the end */}
+                            <td className="p-2 font-mono text-xs text-slate-600 whitespace-nowrap">
+                              {formatDateTime(r)}
                             </td>
                           </tr>
                         )
@@ -326,6 +360,8 @@ export default function ReadingsTable({
                     })}
 
                     <td colSpan="5" className="bg-slate-50" />
+                    {/* Empty cell for Date/Time column in average row */}
+                    <td className="bg-slate-50" />
                   </tr>
                 )
               })()}
