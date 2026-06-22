@@ -44,11 +44,12 @@ export const ELEMENT_NAMES = {
   Nb: 'Niobium', Hf: 'Hafnium', Ta: 'Tantalum', V: 'Vanadium',
 }
 
-// Fixed ordered columns for the readings table - using chemical symbols as headers
+// Fixed ordered columns for the readings table - Updated to include mq and x1
 export const READING_COLUMNS = [
   'Au', 'Ag', 'Cu', 'Zn', 'Ni', 'Cd', 'In', 
   'Ir', 'Ru', 'Rh', 'Pd', 'Fe', 'Pt', 'Os', 
-  'Re', 'Co', 'Ga', 'Sn', 'Pb', 'Bi', 'W', 'Sb'
+  'Re', 'Co', 'Ga', 'Sn', 'Pb', 'Bi', 'W', 'Sb',
+  'mq', 'x1'
 ]
 
 export const ALL_ELEMENT_GROUPS = [

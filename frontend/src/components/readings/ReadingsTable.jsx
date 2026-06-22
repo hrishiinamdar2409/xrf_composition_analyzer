@@ -1,5 +1,7 @@
-import { useState } from 'react'
-import { PROFILE_FILTERS, READING_COLUMNS } from '../../constants/readingsConstants'
+import React from 'react'
+import { READING_COLUMNS } from '../../constants/readingsConstants'
+
+const ORDERED_PROFILES = ['TUNCH', 'FINE', 'JEWEL', 'PURE', 'SILVER']
 
 export default function ReadingsTable({
   readings,
@@ -35,219 +37,303 @@ export default function ReadingsTable({
     return idxA - idxB
   })
 
+  // Group sorted readings by Block for nested display
+  const groupedByBlock = sortedReadings.reduce((groups, reading) => {
+    const blockName = reading.block || 'No Block'
+    if (!groups[blockName]) groups[blockName] = []
+    groups[blockName].push(reading)
+    return groups
+  }, {})
+
+  // Get ordered list of block keys
+  const blockKeys = Object.keys(groupedByBlock).sort((a, b) => {
+    const numA = parseInt(a), numB = parseInt(b)
+    if (!isNaN(numA) && !isNaN(numB)) return numB - numA
+    return b.localeCompare(a)
+  })
+
   const handleSelectLastN = (n) => {
     if (sortedReadings.length < n) return
     const selected = new Set(sortedReadings.slice(0, n).map(r => r.id))
     onSelectLastN?.(selected)
   }
 
-  return (
-    <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4">
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-        <p className="text-sm font-semibold text-slate-700">LIVE READING RETRIEVAL</p>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">
-            {selectedReadingIds.size} of {sortedReadings.length} selected
-          </span>
-          <button onClick={selectAllReadings}
-            className="px-3 h-7 text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors border border-slate-600">
-            All
-          </button>
-          <button onClick={clearReadings}
-            className="px-3 h-7 text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors border border-slate-600">
-            Clear
-          </button>
-        </div>
-      </div>
+  // Toggle selection for an entire block
+  const toggleBlockSelection = (blockReadings) => {
+    const allSelected = blockReadings.every(r => selectedReadingIds.has(r.id))
+    blockReadings.forEach(r => {
+      if (allSelected && selectedReadingIds.has(r.id)) {
+        toggleReading(r.id)
+      } else if (!allSelected && !selectedReadingIds.has(r.id)) {
+        toggleReading(r.id)
+      }
+    })
+  }
 
-      {/* Profile Filter Buttons */}
-      <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-        <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest shrink-0 mr-1">
-          PROFILE
-        </span>
-        <button
-          onClick={() => setProfileFilter('DATA')}
-          className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
-            profileFilter === 'DATA'
-              ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
-              : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
-          }`}
-        >
-          DATA
-        </button>
-        <button
-          onClick={() => setProfileFilter('ALL')}
-          className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
-            profileFilter === 'ALL'
-              ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
-              : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
-          }`}
-        >
-          ALL
-        </button>
-        {PROFILE_FILTERS.filter(p => p !== 'ALL').map(profile => (
+  // Helper method to look deep into raw reading parameters with SQL Alias Fallbacks
+  const getElementValue = (reading, symbol) => {
+    // CATCH BACKEND SQL ALIAS: "x1 AS karat"
+    if (symbol.toLowerCase() === 'x1' && reading.karat !== undefined) {
+      return Number(reading.karat)
+    }
+
+    // 1. Check inside elements sub-array if existing
+    if (reading.elements && Array.isArray(reading.elements)) {
+      const match = reading.elements.find(el => el && el.name && el.name.toLowerCase() === symbol.toLowerCase())
+      if (match && match.value !== undefined) return Number(match.value)
+    }
+
+    // 2. Direct property fallbacks on root item object
+    if (reading[symbol] !== undefined) return Number(reading[symbol])
+    if (reading[symbol.toLowerCase()] !== undefined) return Number(reading[symbol.toLowerCase()])
+    if (reading[symbol.toUpperCase()] !== undefined) return Number(reading[symbol.toUpperCase()])
+
+    // 3. Nested metadata backup properties
+    if (reading.metadata && reading.metadata[symbol] !== undefined) return Number(reading.metadata[symbol])
+
+    return 0
+  }
+
+  // Reliable tracking condition for checking if all current visible rows are selected
+  const isAllVisibleSelected = sortedReadings.length > 0 && sortedReadings.every(r => selectedReadingIds.has(r.id))
+
+  const totalColumnsCount = 7 + READING_COLUMNS.length
+
+  return (
+    <div className="flex flex-col gap-3 w-full">
+      
+      {/* 1. PROFILE FILTER PANEL (COMPLETELY UNTOUCHED ORIGINALS) */}
+      <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest shrink-0 mr-1">
+            PROFILE
+          </span>
           <button
-            key={profile}
-            onClick={() => setProfileFilter(profile)}
+            onClick={() => setProfileFilter('ALL')}
             className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
-              profileFilter === profile
+              profileFilter === 'ALL'
                 ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
                 : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
             }`}
           >
-            {profile}
+            ALL
           </button>
-        ))}
-        <span className="text-[10px] text-slate-500 ml-1">
+          {ORDERED_PROFILES.map(profile => (
+            <button
+              key={profile}
+              onClick={() => setProfileFilter(profile)}
+              className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
+                profileFilter === profile
+                  ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
+                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+              }`}
+            >
+              {profile}
+            </button>
+          ))}
+          <button
+            onClick={() => setProfileFilter('DATA')}
+            className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
+              profileFilter === 'DATA'
+                ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
+                : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+            }`}
+          >
+            DATA
+          </button>
+        </div>
+        <span className="text-[10px] text-slate-500 font-medium">
           ({sortedReadings.length} rows)
         </span>
       </div>
 
-      {/* Quick-select last N readings */}
-      <div className="flex items-center gap-1.5 mb-3">
-        <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest shrink-0">LAST</span>
-        {[1, 2, 3, 4, 5, 6, 8, 10].map(n => (
-          <button key={n}
-            onClick={() => handleSelectLastN(n)}
-            disabled={sortedReadings.length < n}
-            className={`h-6 w-7 rounded text-xs font-bold border transition-all active:scale-95 disabled:opacity-30 ${
-              selectedReadingIds.size === n && 
+      {/* 2. LIVE READING MATRIX CONTAINER */}
+      <div className="border border-slate-200 rounded bg-white shadow-sm p-4 text-slate-900 antialiased font-sans">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <p className="text-xs font-bold text-slate-400 tracking-wider uppercase">LIVE READING RETRIEVAL</p>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500">
+              {selectedReadingIds.size} of {sortedReadings.length} selected
+            </span>
+            <div className="flex items-center gap-1">
+              <button onClick={selectAllReadings}
+                className="px-2.5 h-6 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 rounded border border-slate-200 transition-colors">
+                All
+              </button>
+              <button onClick={clearReadings}
+                className="px-2.5 h-6 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 rounded border border-slate-200 transition-colors">
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick-Select Buttons */}
+        <div className="flex items-center gap-1.5 mb-4">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mr-1">LAST</span>
+          {[1, 2, 3, 4, 5, 6, 8, 10].map(n => {
+            const isButtonActive = selectedReadingIds.size === n && 
               [...selectedReadingIds].every(id => sortedReadings.slice(0, n).some(r => r.id === id))
-                ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
-                : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
-            }`}>
-            {n}
-          </button>
-        ))}
-      </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-700">
-        <table className="w-full text-xs">
-          <thead className="bg-slate-900 text-slate-400 uppercase tracking-wider">
-            <tr>
-              <th className="px-2 py-2 w-7">
-                <input type="checkbox"
-                  checked={sortedReadings.length > 0 && selectedReadingIds.size === sortedReadings.length}
-                  onChange={e => e.target.checked ? selectAllReadings() : clearReadings()}
-                  className="accent-[#1a73ca] w-3.5 h-3.5 cursor-pointer"
-                />
-              </th>
-              <th className="px-2 py-2 text-left whitespace-nowrap">BLOCK</th>
-              <th className="px-2 py-2 text-left whitespace-nowrap">ENTRY</th>
-              <th className="px-2 py-2 text-left whitespace-nowrap">SERIAL</th>
-              <th className="px-2 py-2 text-left whitespace-nowrap">CUSTOMER</th>
-              <th className="px-2 py-2 text-left whitespace-nowrap">SAMPLE TYPE</th>
-              <th className="px-2 py-2 text-right whitespace-nowrap">WEIGHT</th>
-              <th className="px-2 py-2 text-left whitespace-nowrap">PROFILE</th>
-              <th className="px-2 py-2 text-left whitespace-nowrap">FILE</th>
-              {READING_COLUMNS.map(sym => (
-                <th key={sym} className="px-2 py-2 text-right whitespace-nowrap">{sym}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-700">
-            {sortedReadings.length === 0 ? (
+            return (
+              <button key={n}
+                onClick={() => handleSelectLastN(n)}
+                disabled={sortedReadings.length < n}
+                className={`h-6 w-9 rounded text-xs font-mono border font-bold transition-all disabled:opacity-20 ${
+                  isButtonActive
+                    ? 'bg-[#1a73ca] text-white border-[#1a73ca] shadow-sm shadow-[#1a73ca]/20'
+                    : 'bg-slate-50 text-[#1a73ca] border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                }`}>
+                {n}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* FIXED CONTAINER: Added max-h-[440px] to limit viewport view exactly to ~10 rows vertically, scrollable internally */}
+        <div className="overflow-x-auto overflow-y-auto max-h-[500px] border border-slate-200 rounded relative">
+          <table className="w-full text-left border-collapse table-auto">
+            {/* FIXED HEADER: Added sticky top-0 z-10 style so header stays pinned during scroll parameters */}
+            <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] tracking-wider font-bold select-none border-b border-slate-300 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(203,213,225,1)]">
               <tr>
-                <td colSpan={9 + READING_COLUMNS.length} className="text-center py-12 text-slate-500">
-                  {readings.length === 0 ? 'Waiting for readings from WinFTM…' : `No readings with filter "${profileFilter}"`}
-                </td>
-              </tr>
-            ) : sortedReadings.map(r => {
-              const isSelected = selectedReadingIds.has(r.id)
-              const elMap = {}
-              if (r.elements && Array.isArray(r.elements)) {
-                r.elements.forEach(el => {
-                  elMap[el.name] = el.value
-                })
-              }
-              READING_COLUMNS.forEach(sym => {
-                if (r[sym] !== undefined && elMap[sym] === undefined) {
-                  elMap[sym] = r[sym]
-                }
-              })
-              
-              return (
-                <tr key={r.id}
-                  onClick={() => {
-                    toggleReading(r.id)
-                  }}
-                  className={`cursor-pointer transition-colors ${
-                    isSelected ? 'bg-[#e8f1fb] border-l-2 border-l-[#1a73ca]' : 'hover:bg-slate-700/50'
-                  }`}>
-                  <td className="px-2 py-1.5 text-center" onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" checked={isSelected} onChange={() => toggleReading(r.id)}
-                      className="accent-[#1a73ca] w-3.5 h-3.5 cursor-pointer" />
-                  </td>
-                  <td className="px-2 py-1.5 font-mono font-bold text-slate-300">{r.block || '-'}</td>
-                  <td className="px-2 py-1.5 text-slate-300">{r.entry_index ?? '-'}</td>
-                  <td className="px-2 py-1.5 text-slate-300">{r.serial_number || '-'}</td>
-                  <td className="px-2 py-1.5 text-slate-300 truncate max-w-[100px]" title={r.customer_name}>
-                    {r.customer_name || '-'}
-                  </td>
-                  <td className="px-2 py-1.5 text-slate-300">{r.sample_type || '-'}</td>
-                  <td className="px-2 py-1.5 text-right text-slate-300">{r.weight != null ? r.weight.toFixed(3) : '-'}</td>
-                  <td className="px-2 py-1.5 text-slate-300">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                      r.profile === 'ALL' ? 'bg-blue-500/20 text-blue-400' :
-                      r.profile === 'JEWEL' ? 'bg-amber-500/20 text-amber-400' :
-                      r.profile === 'FINE' ? 'bg-emerald-500/20 text-emerald-400' :
-                      r.profile === 'PURE' ? 'bg-purple-500/20 text-purple-400' :
-                      r.profile === 'SILVER' ? 'bg-slate-400/20 text-slate-300' :
-                      r.profile === 'TUNCH' ? 'bg-orange-500/20 text-orange-400' :
-                      'bg-slate-500/20 text-slate-400'
-                    }`}>
-                      {r.profile || '-'}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1.5 text-slate-400 truncate max-w-[120px]" title={r.file_path}>
-                    {r.file_path ? r.file_path.split(/[/\\]/).pop() : '-'}
-                  </td>
-                  {READING_COLUMNS.map(sym => (
-                    <td key={sym} className="px-2 py-1.5 text-right font-mono text-slate-300">
-                      {(elMap[sym] ?? 0).toFixed(3)}
-                    </td>
-                  ))}
-                </tr>
-              )
-            })}
+                <th className="p-2 w-10 text-center border-r border-slate-200 bg-slate-50">
+                  <input type="checkbox"
+                    checked={isAllVisibleSelected}
+                    onChange={() => isAllVisibleSelected ? clearReadings() : selectAllReadings()}
+                    className="w-3.5 h-3.5 cursor-pointer rounded accent-slate-700"
+                  />
+                </th>
+                <th className="p-2 text-slate-700 border-r border-slate-200 whitespace-nowrap bg-slate-50">SAMPLE NO</th>
+                
+                {/* Dynamic Element Sequence Columns Loop */}
+                {READING_COLUMNS.map(sym => (
+                  <th key={sym} className="px-3 py-2 text-right text-slate-800 font-bold border-r border-slate-200 whitespace-nowrap bg-slate-50">
+                    {sym} (%)
+                  </th>
+                ))}
 
-            {/* Live average row */}
-            {selectedReadingIds.size > 0 && (() => {
-              const subset = sortedReadings.filter(r => selectedReadingIds.has(r.id))
-              const sums = {}, counts = {}
-              subset.forEach(r => {
-                const elMap = {}
-                if (r.elements && Array.isArray(r.elements)) {
-                  r.elements.forEach(el => {
-                    elMap[el.name] = el.value
-                  })
-                }
-                READING_COLUMNS.forEach(sym => {
-                  const val = elMap[sym] ?? r[sym] ?? 0
-                  sums[sym] = (sums[sym] || 0) + val
-                  counts[sym] = (counts[sym] || 0) + 1
-                })
-              })
-              return (
-                <tr className="bg-[#e8f1fb] border-t-2 border-[#1a73ca] font-bold">
-                  <td className="px-2 py-1.5" />
-                  <td className="px-2 py-1.5 text-[#1a73ca] text-xs uppercase tracking-wide whitespace-nowrap" colSpan="8">
-                    Avg ({selectedReadingIds.size})
+                <th className="p-2 text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">CUSTOMER</th>
+                <th className="p-2 text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">SAMPLE TYPE</th>
+                <th className="p-2 text-right text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">WEIGHT</th>
+                <th className="p-2 text-slate-500 border-r border-slate-200 whitespace-nowrap bg-slate-50">PROFILE</th>
+                <th className="p-2 text-slate-500 whitespace-nowrap bg-slate-50">FILE</th>
+              </tr>
+            </thead>
+            
+            <tbody className="text-xs divide-y divide-slate-200 bg-white">
+              {sortedReadings.length === 0 ? (
+                <tr>
+                  <td colSpan={totalColumnsCount} className="text-center py-12 text-slate-400 font-medium">
+                    Waiting for real-time matrix stream updates...
                   </td>
-                  {READING_COLUMNS.map(sym => {
-                    const avg = sums[sym] != null ? sums[sym] / counts[sym] : 0
-                    return (
-                      <td key={sym} className="px-2 py-1.5 text-right font-mono text-[#1a73ca]">
-                        {avg.toFixed(3)}
-                      </td>
-                    )
-                  })}
                 </tr>
-              )
-            })()}
-          </tbody>
-        </table>
+              ) : (
+                blockKeys.map(blockName => {
+                  const blockReadings = groupedByBlock[blockName]
+                  const isBlockAllSelected = blockReadings.every(r => selectedReadingIds.has(r.id))
+                  
+                  return (
+                    <React.Fragment key={blockName}>
+                      {/* Light Block Separator Header */}
+                      <tr className="bg-slate-100/60 border-y border-slate-200 select-none">
+                        <td className="p-1.5 text-center border-r border-slate-200">
+                          <input 
+                            type="checkbox" 
+                            checked={isBlockAllSelected} 
+                            onChange={() => toggleBlockSelection(blockReadings)}
+                            className="w-3.5 h-3.5 cursor-pointer rounded accent-slate-700"
+                          />
+                        </td>
+                        <td colSpan={totalColumnsCount - 1} className="px-3 py-1 font-bold text-slate-700 tracking-wider text-xs font-mono uppercase">
+                          Block {blockName}
+                        </td>
+                      </tr>
+
+                      {/* Focused Monochrome Data Table Row Listings */}
+                      {blockReadings.map(r => {
+                        const isSelected = selectedReadingIds.has(r.id)
+
+                        return (
+                          <tr key={r.id}
+                            onClick={() => toggleReading(r.id)}
+                            className={`transition-colors border-b border-slate-100 cursor-pointer ${
+                              isSelected ? 'bg-slate-100/70 font-semibold' : 'hover:bg-slate-50/50'
+                            }`}>
+                            <td className="p-2 text-center border-r border-slate-200" onClick={e => e.stopPropagation()}>
+                              <input type="checkbox" checked={isSelected} onChange={() => toggleReading(r.id)}
+                                className="w-3.5 h-3.5 cursor-pointer rounded accent-slate-700" />
+                            </td>
+                            <td className="p-2 font-mono text-center text-slate-500 border-r border-slate-200">
+                              {r.entry_index ?? '-'}
+                            </td>
+
+                            {/* Crisp, Balanced Monospaced Numeric Data Nodes */}
+                            {READING_COLUMNS.map(sym => (
+                              <td key={sym} className="px-3 py-2 text-right font-mono text-sm font-medium tracking-wide text-slate-900 border-r border-slate-200">
+                                {getElementValue(r, sym).toFixed(3)}
+                              </td>
+                            ))}
+
+                            <td className="p-2 truncate max-w-[120px] text-slate-600 border-r border-slate-200" title={r.customer_name}>
+                              {r.customer_name || '-'}
+                            </td>
+                            <td className="p-2 text-slate-600 border-r border-slate-200 whitespace-nowrap">{r.sample_type || '-'}</td>
+                            <td className="p-2 text-right font-mono text-slate-600 border-r border-slate-200">
+                              {r.weight != null ? r.weight.toFixed(3) : '-'}
+                            </td>
+                            <td className="p-2 text-slate-600 font-mono text-xs border-r border-slate-200 uppercase tracking-wide">
+                              {r.profile || '-'}
+                            </td>
+                            <td className="p-2 text-slate-400 font-mono truncate max-w-[120px]" title={r.file_path}>
+                              {r.file_path ? r.file_path.split(/[/\\]/).pop() : '-'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </React.Fragment>
+                  )
+                })
+              )}
+
+              {/* 3. RUNTIME ACTIVE CALCULATED SELECTION AVERAGES ROW FOOTER */}
+              {selectedReadingIds.size > 0 && (() => {
+                const subset = sortedReadings.filter(r => selectedReadingIds.has(r.id))
+                const sums = {}, counts = {}
+                
+                subset.forEach(r => {
+                  READING_COLUMNS.forEach(sym => {
+                    const val = getElementValue(r, sym)
+                    sums[sym] = (sums[sym] || 0) + val
+                    counts[sym] = (counts[sym] || 0) + 1
+                  })
+                })
+                
+                return (
+                  <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold select-none sticky bottom-0 z-10 shadow-[0_-1px_0_0_rgba(203,213,225,1)]">
+                    <td className="p-2 border-r border-slate-200 bg-slate-50" />
+                    <td className="p-2 text-slate-800 text-[10px] uppercase tracking-wider font-bold text-center border-r border-slate-200 bg-slate-50">
+                      AVG ({selectedReadingIds.size})
+                    </td>
+                    
+                    {/* Aligned Summary Calculations Column Outputs */}
+                    {READING_COLUMNS.map(sym => {
+                      const avg = sums[sym] != null ? sums[sym] / counts[sym] : 0
+                      return (
+                        <td key={sym} className="px-3 py-2 text-right font-mono text-sm font-bold text-slate-950 border-r border-slate-200 bg-slate-50">
+                          {avg.toFixed(3)}
+                        </td>
+                      )
+                    })}
+
+                    <td colSpan="5" className="bg-slate-50" />
+                  </tr>
+                )
+              })()}
+            </tbody>
+          </table>
+        </div>
       </div>
+
     </div>
   )
 }

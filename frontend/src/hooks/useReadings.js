@@ -44,7 +44,7 @@ export function useReadings() {
   const [saving, setSaving] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [editingSampleId, setEditingSampleId] = useState(null)
-  const [profileFilter, setProfileFilter] = useState('DATA')
+  const [profileFilter, setProfileFilter] = useState('ALL')
   
   const isLoadingEditRef = useRef(false)
   const nextItemTimerRef = useRef(null)
