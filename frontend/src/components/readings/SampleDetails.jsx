@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import Field from './Field'
 
 const INPUT = 'w-full border border-slate-600 rounded-lg px-2.5 py-1.5 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:bg-white bg-slate-700 text-slate-100 placeholder-slate-400'
@@ -21,6 +22,11 @@ export default function SampleDetails({
   clearDrafts,
   setPrimaryValue,
 }) {
+  // Log when customerName changes for debugging
+  useEffect(() => {
+    console.log('SampleDetails - customerName updated:', customerName)
+  }, [customerName])
+
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4">
       <p className="text-sm font-semibold text-slate-700 mb-3">SAMPLE DETAILS</p>
@@ -28,7 +34,7 @@ export default function SampleDetails({
         <Field label="Customer Name" required>
           <input 
             className={INPUT} 
-            value={customerName} 
+            value={customerName || ''} 
             onChange={e => { 
               setCustomerName(e.target.value)
               clearFieldError('customerName')
@@ -68,7 +74,7 @@ export default function SampleDetails({
               <input 
                 className={INPUT} 
                 type="date" 
-                value={date} 
+                value={date || ''} 
                 onChange={e => { 
                   setDate(e.target.value)
                   clearFieldError('date')
@@ -80,7 +86,7 @@ export default function SampleDetails({
             <div className="flex-1 flex flex-col gap-1">
               <span className="text-xs font-semibold text-slate-700">Sample Type <span className="text-red-500">*</span></span>
               <select 
-                value={sampleType} 
+                value={sampleType || ''} 
                 onChange={e => { 
                   setSampleType(e.target.value)
                   clearFieldError('sampleType')
@@ -88,7 +94,7 @@ export default function SampleDetails({
                 }}
                 className="border border-slate-600 rounded-lg px-2 py-1.5 text-sm bg-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500 w-full"
               >
-                {['Silver Sample', 'Gold Sample', 'Platinum Sample', 'Fine Gold', 'Coin', 'Bar']
+                {['Silver Sample', 'Gold Sample', 'Platinum Sample', 'Fine Gold', 'Coin', 'Bar', 'all samples', 'copper sample']
                   .map(t => <option key={t} value={t}>{t}</option>)}
               </select>
               {formErrors.sampleType && <span className="text-xs text-red-400">{formErrors.sampleType}</span>}
@@ -97,7 +103,7 @@ export default function SampleDetails({
         </div>
 
         <Field label="Sr. No.">
-          <input className={INPUT} type="text" value={srNo} disabled placeholder="Calculating next Sr.No..." />
+          <input className={INPUT} type="text" value={srNo || ''} disabled placeholder="Calculating next Sr.No..." />
         </Field>
 
         <Field label="Weight (gm)" required>
@@ -106,7 +112,7 @@ export default function SampleDetails({
             type="number" 
             step="0.001" 
             min="0" 
-            value={weight}
+            value={weight || ''}
             onChange={e => { 
               setWeight(e.target.value)
               clearFieldError('weight')
@@ -121,7 +127,7 @@ export default function SampleDetails({
           <input 
             className={INPUT} 
             type="tel" 
-            value={mobile}
+            value={mobile || ''}
             onChange={e => { 
               setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))
               clearFieldError('mobile')

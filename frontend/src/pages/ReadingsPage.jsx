@@ -1,7 +1,6 @@
 import { Toaster } from 'react-hot-toast'
 import { useReadings } from '../hooks/useReadings'
 import SampleDetails from '../components/readings/SampleDetails'
-import EntryModeSelector from '../components/readings/EntryModeSelector'
 import ActionBar from '../components/readings/ActionBar'
 import CompositionPanel from '../components/readings/CompositionPanel'
 import ReadingsTable from '../components/readings/ReadingsTable'
@@ -46,6 +45,9 @@ export default function ReadingsPage() {
     handleSave,
     handlePrint,
     prepareFreshEntry,
+    profileFilter,
+    setProfileFilter,
+    handleSelectLastN,
   } = useReadings()
 
   const primaryDeltaRow = machineDeltaRows.find(row => row.sym === primKey) || null
@@ -128,19 +130,16 @@ export default function ReadingsPage() {
         {/* ── RIGHT PANEL ─────────────────────────────── */}
         <div className="w-1/2 min-w-0">
 
-          {/* Entry Mode */}
-          <EntryModeSelector
-            entryMode={entryMode}
-            setEntryMode={setEntryMode}
-          />
-
-          {/* Readings Table */}
+          {/* Readings Table with Profile Filters */}
           <ReadingsTable
             readings={readings}
             selectedReadingIds={selectedReadingIds}
             toggleReading={toggleReading}
             selectAllReadings={selectAllReadings}
             clearReadings={clearReadings}
+            profileFilter={profileFilter}
+            setProfileFilter={setProfileFilter}
+            onSelectLastN={handleSelectLastN}
           />
 
         </div>{/* end RIGHT PANEL */}

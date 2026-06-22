@@ -56,7 +56,7 @@ function validateSamplePayload(payload, { requireReadingIds = true } = {}) {
     errors.push({ field: 'itemDesc', message: 'Item description is required and must be under 300 characters.' });
   }
 
-  if (!/^\d{10}$/.test(mobileFromItemDesc)) {
+  if (mobileFromItemDesc && !/^\d{10}$/.test(mobileFromItemDesc)) {
     errors.push({ field: 'mobile', message: 'Mobile number must be exactly 10 digits.' });
   }
 
@@ -124,25 +124,34 @@ function validateExpertValuesPayload(expertValues) {
 }
 
 function generateNextSrNo(db) {
-  // Get the highest Sr.No from existing samples
-  const result = db.prepare(`
-    SELECT job_ref FROM samples ORDER BY CAST(SUBSTR(job_ref, -10) AS INTEGER) DESC LIMIT 1
-  `).get();
-  
-  if (!result) {
-    // No existing records, start with 1
-    return '1';
-  }
-  
-  // Extract number from job_ref and increment
-  const match = result.job_ref.match(/(\d+)$/);
-  if (match) {
-    const nextNum = parseInt(match[1]) + 1;
+  try {
+    // Get all job_ref values
+    const results = db.prepare(`SELECT job_ref FROM samples ORDER BY id DESC`).all();
+    
+    if (!results || results.length === 0) {
+      return '1';
+    }
+    
+    // Find the highest number from job_ref
+    let maxNum = 0;
+    for (const row of results) {
+      if (!row.job_ref) continue;
+      // Try to extract number from job_ref
+      const match = row.job_ref.match(/(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+    
+    const nextNum = maxNum + 1;
     return String(nextNum);
+  } catch (err) {
+    console.error('[generateNextSrNo] Error:', err);
+    return String(Date.now()).slice(-6);
   }
-  
-  // Fallback
-  return '1';
 }
 
 function calcAutoResults(db, sampleId) {
@@ -160,11 +169,15 @@ function calcAutoResults(db, sampleId) {
   const totals = {};
   const counts = {};
   for (const row of rows) {
-    const elements = JSON.parse(row.elements_json);
-    for (const el of elements) {
-      if (el.value === null) continue;
-      totals[el.name] = (totals[el.name] || 0) + el.value;
-      counts[el.name] = (counts[el.name] || 0) + 1;
+    try {
+      const elements = JSON.parse(row.elements_json);
+      for (const el of elements) {
+        if (el.value === null) continue;
+        totals[el.name] = (totals[el.name] || 0) + el.value;
+        counts[el.name] = (counts[el.name] || 0) + 1;
+      }
+    } catch (e) {
+      // Ignore parse errors
     }
   }
 
@@ -202,7 +215,7 @@ function parseItemDesc(itemDesc) {
   }
 
   const weightMatch = itemDesc.match(/Wt:([0-9.]+)g/i);
-  if (weightMatch) parsed.weight = weightMatch[1];
+  if (weightMatch) parsed.weight = parseFloat(weightMatch[1]);
 
   const srMatch = itemDesc.match(/Sr:([0-9]+)/i);
   if (srMatch) parsed.srNo = srMatch[1];
@@ -392,106 +405,109 @@ function buildPreviewHtml(sample) {
 
 // GET /api/samples
 router.get('/', (req, res) => {
-  const db = getDb();
-  const samples = db.prepare(`
-    SELECT s.*,
-           COUNT(sr.reading_id) as reading_count,
-           GROUP_CONCAT(sr.reading_id || ':' || sr.excluded || ':' || COALESCE(r2.nbr, '') ORDER BY sr.reading_id ASC) as reading_meta
-    FROM samples s
-    LEFT JOIN sample_readings sr ON sr.sample_id = s.id
-    LEFT JOIN readings r2 ON r2.id = sr.reading_id
-    GROUP BY s.id
-    ORDER BY s.id DESC
-  `).all();
+  try {
+    const db = getDb();
+    const samples = db.prepare(`
+      SELECT s.*,
+             COUNT(sr.reading_id) as reading_count,
+             GROUP_CONCAT(sr.reading_id || ':' || sr.excluded || ':' || COALESCE(r2.nbr, '') ORDER BY sr.reading_id ASC) as reading_meta
+      FROM samples s
+      LEFT JOIN sample_readings sr ON sr.sample_id = s.id
+      LEFT JOIN readings r2 ON r2.id = sr.reading_id
+      GROUP BY s.id
+      ORDER BY s.id DESC
+    `).all();
 
-  // Fetch all final & auto results in one query, then group by sample_id
-  const allResults = db.prepare(`
-    SELECT
-      fr.sample_id,
-      fr.element,
-      fr.expert_value,
-      fr.auto_value
-    FROM final_results fr
-    ORDER BY fr.sample_id, fr.element
-  `).all();
+    // Fetch all final & auto results in one query, then group by sample_id
+    const allResults = db.prepare(`
+      SELECT
+        fr.sample_id,
+        fr.element,
+        fr.expert_value,
+        fr.auto_value
+      FROM final_results fr
+      ORDER BY fr.sample_id, fr.element
+    `).all();
 
-  const resultsBySample = {};
-  for (const r of allResults) {
-    if (!resultsBySample[r.sample_id]) resultsBySample[r.sample_id] = [];
-    resultsBySample[r.sample_id].push({ element: r.element, value: r.expert_value ?? r.auto_value });
+    const resultsBySample = {};
+    for (const r of allResults) {
+      if (!resultsBySample[r.sample_id]) resultsBySample[r.sample_id] = [];
+      resultsBySample[r.sample_id].push({ element: r.element, value: r.expert_value ?? r.auto_value });
+    }
+
+    res.json(samples.map(s => {
+      // Parse "id:excluded,id:excluded,..." into [{id, excluded, num}]
+      const readings = s.reading_meta
+        ? s.reading_meta.split(',').map((tok, idx) => {
+            const [id, excl, nbr] = tok.split(':');
+            return { id: Number(id), excluded: excl === '1', num: idx + 1, nbr: nbr || null };
+          })
+        : [];
+
+      const { reading_meta, ...rest } = s;
+      return {
+        ...rest,
+        parsedItemDesc: parseItemDesc(s.item_desc),
+        elementResults: resultsBySample[s.id] || [],
+        readings,
+      };
+    }));
+  } catch (err) {
+    console.error('[GET /api/samples] Error:', err);
+    res.status(500).json({ error: 'Failed to fetch samples', details: err.message });
   }
-
-  res.json(samples.map(s => {
-    // Parse "id:excluded,id:excluded,..." into [{id, excluded, num}]
-    const readings = s.reading_meta
-      ? s.reading_meta.split(',').map((tok, idx) => {
-          const [id, excl, nbr] = tok.split(':');
-          return { id: Number(id), excluded: excl === '1', num: idx + 1, nbr: nbr || null };
-        })
-      : [];
-
-    const { reading_meta, ...rest } = s;
-    return {
-      ...rest,
-      parsedItemDesc: parseItemDesc(s.item_desc),
-      elementResults: resultsBySample[s.id] || [],
-      readings,
-    };
-  }));
 });
 
 // GET /api/samples/next-sr — predict the next Sr.No (for UI display only)
 router.get('/next-sr', (req, res) => {
-  const db = getDb();
-  const result = db.prepare(`
-    SELECT job_ref FROM samples ORDER BY CAST(SUBSTR(job_ref, -10) AS INTEGER) DESC LIMIT 1
-  `).get();
-  
-  let nextSrNo = '1';
-  if (result) {
-    const match = result.job_ref.match(/(\d+)$/);
-    if (match) {
-      const nextNum = parseInt(match[1]) + 1;
-      nextSrNo = String(nextNum);
-    }
+  try {
+    const db = getDb();
+    const nextSrNo = generateNextSrNo(db);
+    console.log('[GET /api/samples/next-sr] nextSrNo:', nextSrNo);
+    res.json({ nextSrNo });
+  } catch (err) {
+    console.error('[GET /api/samples/next-sr] Error:', err);
+    res.status(500).json({ error: 'Failed to get next SR number' });
   }
-  
-  console.log('[GET /api/samples/next-sr] nextSrNo:', nextSrNo);
-  res.json({ nextSrNo });
 });
 
 // GET /api/samples/:id — with linked readings and auto results
 router.get('/:id', (req, res) => {
-  const db = getDb();
-  const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(req.params.id);
-  if (!sample) return res.status(404).json({ error: 'Not found' });
+  try {
+    const db = getDb();
+    const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(req.params.id);
+    if (!sample) return res.status(404).json({ error: 'Not found' });
 
-  const readings = db.prepare(`
-    SELECT r.*, sr.excluded
-    FROM readings r
-    JOIN sample_readings sr ON sr.reading_id = r.id
-    WHERE sr.sample_id = ?
-    ORDER BY r.id ASC
-  `).all(req.params.id).map(r => ({
-    ...r,
-    elements: JSON.parse(r.elements_json),
-  }));
+    const readings = db.prepare(`
+      SELECT r.*, sr.excluded
+      FROM readings r
+      JOIN sample_readings sr ON sr.reading_id = r.id
+      WHERE sr.sample_id = ?
+      ORDER BY r.id ASC
+    `).all(req.params.id).map(r => ({
+      ...r,
+      elements: JSON.parse(r.elements_json || '[]'),
+    }));
 
-  const autoResults = db.prepare(`
-    SELECT element, auto_value FROM auto_results WHERE sample_id = ?
-  `).all(req.params.id);
+    const autoResults = db.prepare(`
+      SELECT element, auto_value FROM auto_results WHERE sample_id = ?
+    `).all(req.params.id);
 
-  const finalResults = db.prepare(`
-    SELECT element, auto_value, expert_value FROM final_results WHERE sample_id = ?
-  `).all(req.params.id);
+    const finalResults = db.prepare(`
+      SELECT element, auto_value, expert_value FROM final_results WHERE sample_id = ?
+    `).all(req.params.id);
 
-  res.json({
-    ...sample,
-    parsedItemDesc: parseItemDesc(sample.item_desc),
-    readings,
-    autoResults,
-    finalResults,
-  });
+    res.json({
+      ...sample,
+      parsedItemDesc: parseItemDesc(sample.item_desc),
+      readings,
+      autoResults,
+      finalResults,
+    });
+  } catch (err) {
+    console.error('[GET /api/samples/:id] Error:', err);
+    res.status(500).json({ error: 'Failed to fetch sample' });
+  }
 });
 
 // POST /api/samples — create new sample and link readings
@@ -511,12 +527,11 @@ router.post('/', (req, res) => {
   
   // Auto-generate Sr.No
   const srNo = generateNextSrNo(db);
-  const jobRef = srNo; // Sr.No IS the job_ref
+  const jobRef = srNo;
 
   try {
     const createSample = db.transaction(() => {
-      // Rebuild itemDesc with auto-generated Sr.No
-      // itemDesc format: "Gold Silver Sample | Wt:100g | Sr:1 | 9876543210"
+      // Build itemDesc with Sr.No
       let finalItemDesc = itemDesc;
       
       // Update/insert Sr.No in itemDesc
@@ -531,7 +546,13 @@ router.post('/', (req, res) => {
       const info = db.prepare(`
         INSERT INTO samples (job_ref, customer_name, item_desc, test_date, created_at, updated_at, status)
         VALUES (@jobRef, @customerName, @itemDesc, @testDate, @now, @now, 'pending_review')
-      `).run({ jobRef, customerName: customerName || null, itemDesc: finalItemDesc, testDate: testDate || null, now });
+      `).run({ 
+        jobRef, 
+        customerName: customerName || null, 
+        itemDesc: finalItemDesc, 
+        testDate: testDate || null, 
+        now 
+      });
 
       const sampleId = info.lastInsertRowid;
       console.log('[POST /api/samples] Created sample:', { sampleId, jobRef, srNo });
@@ -661,7 +682,7 @@ router.post('/:id/revise', (req, res) => {
   res.json({ ok: true, id: sampleId, status: 'expert_review' });
 });
 
-// PATCH /api/samples/:id/readings — exclude/include a reading
+// PATCH /api/samples/:id/readings/:readingId — exclude/include a reading
 router.patch('/:id/readings/:readingId', (req, res) => {
   const { excluded } = req.body;
   if (typeof excluded !== 'boolean') return res.status(400).json({ error: 'excluded boolean required' });
@@ -695,7 +716,7 @@ router.patch('/:id/result', (req, res) => {
     return buildValidationError(res, [{ field: 'id', message: 'Sample id must be a positive integer.' }], 'Invalid sample id');
   }
 
-  const { expertValues, notes, deltaMeta } = req.body; // expertValues: { Au: 75.3, Ag: 12.1, ... }
+  const { expertValues, notes, deltaMeta } = req.body;
   const validation = validateExpertValuesPayload(expertValues);
   if (validation.errors.length) {
     return buildValidationError(res, validation.errors, 'Invalid final result payload');
@@ -771,7 +792,7 @@ router.post('/:id/report', async (req, res) => {
       JOIN sample_readings sr ON sr.reading_id = r.id
       WHERE sr.sample_id = ?
       ORDER BY r.id ASC
-    `).all(sampleId).map(r => ({ ...r, elements: JSON.parse(r.elements_json) }));
+    `).all(sampleId).map(r => ({ ...r, elements: JSON.parse(r.elements_json || '[]') }));
 
     const autoResults  = db.prepare(`SELECT element, auto_value FROM auto_results WHERE sample_id = ?`).all(sampleId);
     const finalResults = db.prepare(`SELECT element, auto_value, expert_value FROM final_results WHERE sample_id = ?`).all(sampleId);
@@ -841,69 +862,74 @@ router.post('/:id/report', async (req, res) => {
 
 // GET /api/samples/:id/export.csv — download approved results as CSV
 router.get('/:id/export.csv', (req, res) => {
-  const db = getDb();
-  const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(req.params.id);
-  if (!sample) return res.status(404).json({ error: 'Not found' });
+  try {
+    const db = getDb();
+    const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(req.params.id);
+    if (!sample) return res.status(404).json({ error: 'Not found' });
 
-  const readings = db.prepare(`
-    SELECT r.*, sr.excluded
-    FROM readings r
-    JOIN sample_readings sr ON sr.reading_id = r.id
-    WHERE sr.sample_id = ?
-    ORDER BY r.id ASC
-  `).all(req.params.id).map(r => ({ ...r, elements: JSON.parse(r.elements_json) }));
+    const readings = db.prepare(`
+      SELECT r.*, sr.excluded
+      FROM readings r
+      JOIN sample_readings sr ON sr.reading_id = r.id
+      WHERE sr.sample_id = ?
+      ORDER BY r.id ASC
+    `).all(req.params.id).map(r => ({ ...r, elements: JSON.parse(r.elements_json || '[]') }));
 
-  const finalResults = db.prepare(`
-    SELECT element, auto_value, expert_value FROM final_results WHERE sample_id = ?
-  `).all(req.params.id);
+    const finalResults = db.prepare(`
+      SELECT element, auto_value, expert_value FROM final_results WHERE sample_id = ?
+    `).all(req.params.id);
 
-  const elementNames = [...new Set(readings.flatMap(r => r.elements.map(e => e.name)))];
+    const elementNames = [...new Set(readings.flatMap(r => r.elements.map(e => e.name)))];
 
-  const lines = [];
+    const lines = [];
 
-  // Header section
-  lines.push(`Job Ref,${sample.job_ref}`);
-  lines.push(`Customer,${sample.customer_name || ''}`);
-  lines.push(`Item,${sample.item_desc || ''}`);
-  lines.push(`Status,${sample.status}`);
-  lines.push(`Approved By,${sample.approved_by || ''}`);
-  lines.push(`Approved At,${sample.approved_at || ''}`);
-  lines.push('');
+    // Header section
+    lines.push(`Job Ref,${sample.job_ref}`);
+    lines.push(`Customer,${sample.customer_name || ''}`);
+    lines.push(`Item,${sample.item_desc || ''}`);
+    lines.push(`Status,${sample.status}`);
+    lines.push(`Approved By,${sample.approved_by || ''}`);
+    lines.push(`Approved At,${sample.approved_at || ''}`);
+    lines.push('');
 
-  // Individual readings
-  lines.push(['#', 'Time', 'Status', ...elementNames].join(','));
-  for (const r of readings) {
-    const row = [
-      r.nbr ?? r.id,
-      new Date(r.arrived_at).toLocaleString('en-GB'),
-      r.excluded ? 'Excluded' : 'Included',
+    // Individual readings
+    lines.push(['#', 'Time', 'Status', ...elementNames].join(','));
+    for (const r of readings) {
+      const row = [
+        r.nbr ?? r.id,
+        new Date(r.arrived_at).toLocaleString('en-GB'),
+        r.excluded ? 'Excluded' : 'Included',
+        ...elementNames.map(n => {
+          const el = r.elements.find(e => e.name === n);
+          return el?.value != null ? el.value.toFixed(4) : '';
+        }),
+      ];
+      lines.push(row.join(','));
+    }
+    lines.push('');
+
+    // Final result row
+    lines.push(['Final Result', '', '', ...elementNames].join(','));
+    const finalRow = [
+      'APPROVED',
+      '',
+      '',
       ...elementNames.map(n => {
-        const el = r.elements.find(e => e.name === n);
-        return el?.value != null ? el.value.toFixed(4) : '';
+        const fr = finalResults.find(f => f.element === n);
+        const val = fr?.expert_value ?? fr?.auto_value;
+        return val != null ? val.toFixed(4) : '';
       }),
     ];
-    lines.push(row.join(','));
+    lines.push(finalRow.join(','));
+
+    const csv = lines.join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${sample.job_ref}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    console.error('[GET /api/samples/:id/export.csv] Error:', err);
+    res.status(500).json({ error: 'Failed to export CSV' });
   }
-  lines.push('');
-
-  // Final result row
-  lines.push(['Final Result', '', '', ...elementNames].join(','));
-  const finalRow = [
-    'APPROVED',
-    '',
-    '',
-    ...elementNames.map(n => {
-      const fr = finalResults.find(f => f.element === n);
-      const val = fr?.expert_value ?? fr?.auto_value;
-      return val != null ? val.toFixed(4) : '';
-    }),
-  ];
-  lines.push(finalRow.join(','));
-
-  const csv = lines.join('\n');
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="${sample.job_ref}.csv"`);
-  res.send(csv);
 });
 
 module.exports = router;

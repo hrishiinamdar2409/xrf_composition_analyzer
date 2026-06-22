@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
 import { 
@@ -12,8 +12,6 @@ import {
   Select,
   Tooltip,
   Badge,
-  Modal,
-  message
 } from "antd";
 import { 
   ReloadOutlined, 
@@ -21,7 +19,8 @@ import {
   PrinterOutlined, 
   EditOutlined, 
   RedoOutlined,
-  ClearOutlined
+  ClearOutlined,
+  EyeOutlined
 } from "@ant-design/icons";
 import "antd/dist/reset.css";
 
@@ -30,24 +29,20 @@ const { Option } = Select;
 
 const STATUS_LABELS = {
   pending_review: {
-    label: "Not Yet Printed",
+    label: "Pending Review",
     color: "warning",
-    status: "pending"
   },
   expert_review: {
-    label: "Not Yet Printed",
-    color: "warning",
-    status: "pending"
+    label: "Expert Review",
+    color: "processing",
   },
   approved: { 
-    label: "Not Yet Printed", 
-    color: "warning",
-    status: "pending"
+    label: "Approved", 
+    color: "success",
   },
   report_generated: { 
     label: "Printed", 
     color: "success",
-    status: "success"
   },
 };
 
@@ -67,24 +62,52 @@ export default function SamplesPage() {
     order: 'descend',
   });
 
-  const fetchSamples = async () => {
+  const fetchSamples = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch("/api/samples");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData?.error || "Failed to fetch samples");
+      }
       const data = await response.json();
       setSamples(data);
       setPagination(prev => ({ ...prev, total: data.length }));
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to load samples");
+      console.error("Error fetching samples:", error);
+      toast.error(error.message || "Failed to load samples");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Initial fetch and event listeners
   useEffect(() => {
     fetchSamples();
-  }, []);
+
+    // Listen for sample saved events from the readings page
+    const handleSampleSaved = (event) => {
+      console.log("Sample saved event received:", event.detail);
+      // Refresh the samples list after a short delay
+      setTimeout(() => {
+        fetchSamples();
+      }, 500);
+    };
+
+    // Listen for print events
+    const handleSamplePrinted = (event) => {
+      console.log("Sample printed event received:", event.detail);
+      fetchSamples();
+    };
+
+    window.addEventListener('sampleSaved', handleSampleSaved);
+    window.addEventListener('samplePrinted', handleSamplePrinted);
+
+    return () => {
+      window.removeEventListener('sampleSaved', handleSampleSaved);
+      window.removeEventListener('samplePrinted', handleSamplePrinted);
+    };
+  }, [fetchSamples]);
 
   const handleModify = async (sampleId) => {
     setLoadingStates(prev => ({ ...prev, [sampleId]: true }));
@@ -136,9 +159,17 @@ export default function SamplesPage() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok)
         throw new Error(body?.detail || body?.error || "Print failed");
+      
       toast.success(
         `Print job sent${body?.printer ? ` to ${body.printer}` : ""} for ${jobRef}`,
+        { duration: 3000, position: 'top-right' }
       );
+      
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent('samplePrinted', { 
+        detail: { sampleId, jobRef }
+      }));
+      
       fetchSamples();
     } catch (err) {
       console.error(err);
@@ -167,64 +198,31 @@ export default function SamplesPage() {
     setPagination(prev => ({ ...prev, pageSize: value, current: 1 }));
   };
 
-  const getColumnSearchProps = (dataIndex, title) => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-      <div style={{ padding: 8 }}>
-        <Input
-          placeholder={`Search ${title}`}
-          value={selectedKeys[0]}
-          onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => confirm()}
-          style={{ marginBottom: 8, display: 'block' }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => confirm()}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Search
-          </Button>
-          <Button onClick={() => clearFilters()} size="small" style={{ width: 90 }}>
-            Reset
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: filtered => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
-    onFilter: (value, record) => {
-      const fieldValue = dataIndex.includes('.') 
-        ? dataIndex.split('.').reduce((obj, key) => obj?.[key], record)
-        : record[dataIndex];
-      return fieldValue ? fieldValue.toString().toLowerCase().includes(value.toLowerCase()) : false;
-    },
-  });
-
   // Filter samples based on search text
   const filteredSamples = samples.filter(sample => {
     if (!searchText) return true;
     const searchLower = searchText.toLowerCase();
-    const srNo = sample.parsedItemDesc?.srNo || "";
+    const srNo = sample.parsedItemDesc?.srNo || sample.job_ref || "";
     const customer = sample.customer_name || "";
     const metal = sample.parsedItemDesc?.sampleCat || "";
     const mobile = sample.parsedItemDesc?.mobile || "";
     const jobRef = sample.job_ref || "";
+    const sampleType = sample.parsedItemDesc?.sampleType || "";
     
     return (
       srNo.toString().toLowerCase().includes(searchLower) ||
       customer.toLowerCase().includes(searchLower) ||
       metal.toLowerCase().includes(searchLower) ||
       mobile.toLowerCase().includes(searchLower) ||
-      jobRef.toLowerCase().includes(searchLower)
+      jobRef.toLowerCase().includes(searchLower) ||
+      sampleType.toLowerCase().includes(searchLower)
     );
   });
 
   // Update pagination total when filtering
   useEffect(() => {
     setPagination(prev => ({ ...prev, total: filteredSamples.length, current: 1 }));
-  }, [searchText, filteredSamples.length]);
+  }, [searchText]);
 
   // Table columns configuration
   const columns = [
@@ -234,17 +232,16 @@ export default function SamplesPage() {
       key: 'sr_no',
       width: 100,
       sorter: (a, b) => {
-        const aVal = a.parsedItemDesc?.srNo || "";
-        const bVal = b.parsedItemDesc?.srNo || "";
+        const aVal = a.parsedItemDesc?.srNo || a.job_ref || "";
+        const bVal = b.parsedItemDesc?.srNo || b.job_ref || "";
         return aVal.toString().localeCompare(bVal.toString());
       },
       sortOrder: sortedInfo.columnKey === 'sr_no' && sortedInfo.order,
       render: (text, record) => (
         <span style={{ fontWeight: 600, color: '#1e293b' }}>
-          {text || record.job_ref}
+          {text || record.job_ref || '—'}
         </span>
       ),
-      ...getColumnSearchProps(['parsedItemDesc', 'srNo'], 'SR No'),
     },
     {
       title: 'CUSTOMER',
@@ -254,7 +251,6 @@ export default function SamplesPage() {
       sorter: (a, b) => (a.customer_name || "").localeCompare(b.customer_name || ""),
       sortOrder: sortedInfo.columnKey === 'customer_name' && sortedInfo.order,
       render: (text) => text || "—",
-      ...getColumnSearchProps('customer_name', 'Customer'),
     },
     {
       title: 'METAL',
@@ -312,7 +308,7 @@ export default function SamplesPage() {
             <Badge count={readingCount} showZero style={{ backgroundColor: '#3b82f6' }} />
             {readings.length > 0 && (
               <div style={{ marginTop: 8 }}>
-                {readings.map((r) => (
+                {readings.slice(0, 3).map((r) => (
                   <Tooltip key={r.id} title={r.excluded ? `Reading ${r.nbr || r.num} (excluded)` : `Reading ${r.nbr || r.num}`}>
                     <Tag 
                       color={r.excluded ? "default" : "blue"}
@@ -326,6 +322,13 @@ export default function SamplesPage() {
                     </Tag>
                   </Tooltip>
                 ))}
+                {readings.length > 3 && (
+                  <Tooltip title={readings.slice(3).map(r => `${r.nbr || r.num}`).join(', ')}>
+                    <Tag style={{ margin: '2px', cursor: 'pointer' }}>
+                      +{readings.length - 3}
+                    </Tag>
+                  </Tooltip>
+                )}
               </div>
             )}
           </div>
@@ -333,7 +336,7 @@ export default function SamplesPage() {
       },
     },
     {
-      title: 'ELEMENT RESULTS',
+      title: 'ELEMENTS',
       key: 'elements',
       width: 300,
       render: (_, record) => {
@@ -353,15 +356,22 @@ export default function SamplesPage() {
             {sorted.length === 0 ? (
               <span style={{ color: '#94a3b8' }}>—</span>
             ) : (
-              sorted.map((el) => (
+              sorted.slice(0, 5).map((el) => (
                 <Tag 
                   key={el.element}
-                  color={el.element === "Au" ? "gold" : "default"}
+                  color={el.element === "Au" ? "gold" : el.element === "Ag" ? "cyan" : "default"}
                   style={{ margin: 0 }}
                 >
                   {el.element}: {el.value != null ? Number(el.value).toFixed(2) : "—"}%
                 </Tag>
               ))
+            )}
+            {sorted.length > 5 && (
+              <Tooltip title={sorted.slice(5).map(el => `${el.element}: ${Number(el.value).toFixed(2)}%`).join(', ')}>
+                <Tag style={{ margin: 0, cursor: 'pointer' }}>
+                  +{sorted.length - 5}
+                </Tag>
+              </Tooltip>
             )}
           </div>
         );
@@ -380,7 +390,7 @@ export default function SamplesPage() {
       },
       sortOrder: sortedInfo.columnKey === 'status' && sortedInfo.order,
       render: (status) => {
-        const statusInfo = STATUS_LABELS[status] || { label: status, color: "default" };
+        const statusInfo = STATUS_LABELS[status] || { label: status || 'Unknown', color: "default" };
         return (
           <Tag color={statusInfo.color} style={{ fontSize: '12px', padding: '2px 12px' }}>
             {statusInfo.label}
@@ -397,46 +407,32 @@ export default function SamplesPage() {
       sorter: (a, b) => new Date(a.created_at) - new Date(b.created_at),
       sortOrder: sortedInfo.columnKey === 'created_at' && sortedInfo.order,
       defaultSortOrder: 'descend',
-      render: (date) => new Date(date).toLocaleDateString("en-GB"),
-    },
-    {
-      title: 'MODIFIED',
-      dataIndex: 'updated_at',
-      key: 'modified_at',
-      width: 140,
-      align: 'center',
-      sorter: (a, b) => {
-        const aDate = new Date(a.updated_at || a.created_at);
-        const bDate = new Date(b.updated_at || b.created_at);
-        return aDate - bDate;
-      },
-      sortOrder: sortedInfo.columnKey === 'modified_at' && sortedInfo.order,
-      render: (date, record) => {
-        const modifiedDate = date || record.created_at;
-        return modifiedDate ? new Date(modifiedDate).toLocaleString("en-GB", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }) : "—";
-      },
+      render: (date) => date ? new Date(date).toLocaleDateString("en-GB") : "—",
     },
     {
       title: 'ACTIONS',
       key: 'actions',
-      width: 180,
+      width: 200,
       align: 'center',
       fixed: 'right',
       render: (_, record) => {
         const statusInfo = STATUS_LABELS[record.status] || { label: record.status };
-        const isPrinted = statusInfo.label === "Printed";
+        const isPrinted = statusInfo.label === "Printed" || record.status === 'report_generated';
         const isPrinting = loadingStates[`print_${record.id}`];
         const isModifying = loadingStates[record.id];
         
         return (
           <Space size="small">
-            <Tooltip title="Print Report">
+            <Tooltip title="View Sample">
+              <Button
+                icon={<EyeOutlined />}
+                size="small"
+                onClick={() => handleModify(record.id)}
+              >
+                View
+              </Button>
+            </Tooltip>
+            <Tooltip title={isPrinted ? "Re-print Report" : "Print Report"}>
               <Button
                 type="primary"
                 icon={<PrinterOutlined />}
@@ -465,6 +461,8 @@ export default function SamplesPage() {
     },
   ];
 
+  const pendingCount = samples.filter(s => s.status === 'pending_review' || s.status === 'expert_review').length;
+
   return (
     <div style={{ padding: '24px', background: '#f5f7fa', minHeight: '100vh' }}>
       <Toaster position="top-right" />
@@ -473,6 +471,12 @@ export default function SamplesPage() {
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <Title level={3} style={{ margin: 0, color: '#1e293b' }}>
             REPORTS QUEUE
+            {pendingCount > 0 && (
+              <Badge 
+                count={pendingCount} 
+                style={{ marginLeft: 12, backgroundColor: '#f59e0b' }}
+              />
+            )}
           </Title>
           
           <Space>
@@ -536,24 +540,27 @@ export default function SamplesPage() {
         />
       </Card>
 
-      <style jsx>{`
-        :global(.table-row-even) {
+      <style>{`
+        .table-row-even {
           background-color: #ffffff;
         }
-        :global(.table-row-odd) {
+        .table-row-odd {
           background-color: #fafbff;
         }
-        :global(.ant-table-thead > tr > th) {
+        .ant-table-thead > tr > th {
           background-color: #f8fafc !important;
           font-weight: 600 !important;
           color: #475569 !important;
           border-bottom: 2px solid #e2e8f0 !important;
         }
-        :global(.ant-table-tbody > tr:hover > td) {
+        .ant-table-tbody > tr:hover > td {
           background-color: #f1f5f9 !important;
         }
-        :global(.ant-tag) {
+        .ant-tag {
           border-radius: 6px;
+        }
+        .ant-badge-count {
+          font-weight: 600;
         }
       `}</style>
     </div>

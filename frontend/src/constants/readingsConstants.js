@@ -5,6 +5,9 @@ export const NON_EDITABLE_ELEMENTS = new Set(['Cu'])
 export const PRIMARY_ELEMENT = { Gold: 'Au', Silver: 'Ag', Platinum: 'Pt' }
 export const ELEMENT_SYMBOL_RX = /^[A-Z][a-z]?$/
 
+// Profile filters - ALL now means only profile='ALL', DATA shows everything
+export const PROFILE_FILTERS = ['JEWEL', 'FINE', 'PURE', 'SILVER', 'TUNCH']
+
 export const INCREMENT_STEPS = [
   { label: '+0.05', delta: 0.05 },
   { label: '+0.1', delta: 0.1 },
@@ -41,11 +44,11 @@ export const ELEMENT_NAMES = {
   Nb: 'Niobium', Hf: 'Hafnium', Ta: 'Tantalum', V: 'Vanadium',
 }
 
-// Fixed ordered columns for the readings table
+// Fixed ordered columns for the readings table - using chemical symbols as headers
 export const READING_COLUMNS = [
   'Au', 'Ag', 'Cu', 'Zn', 'Ni', 'Cd', 'In', 
   'Ir', 'Ru', 'Rh', 'Pd', 'Fe', 'Pt', 'Os', 
-  'Re', 'Co', 'Ga', 'Sn', 'Pb', 'Bi', 'W', 'Sb', 'mq'
+  'Re', 'Co', 'Ga', 'Sn', 'Pb', 'Bi', 'W', 'Sb'
 ]
 
 export const ALL_ELEMENT_GROUPS = [

@@ -8,6 +8,7 @@ import {
   ELEMENT_NAMES,
   NON_EDITABLE_ELEMENTS,
   POWDER_ELEMENTS,
+  READING_COLUMNS,
 } from '../constants/readingsConstants'
 import { 
   formatCompact, 
@@ -43,6 +44,7 @@ export function useReadings() {
   const [saving, setSaving] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [editingSampleId, setEditingSampleId] = useState(null)
+  const [profileFilter, setProfileFilter] = useState('DATA')
   
   const isLoadingEditRef = useRef(false)
   const nextItemTimerRef = useRef(null)
@@ -102,6 +104,17 @@ export function useReadings() {
       })
   }, [])
 
+  const filterValidElements = useCallback((obj) => {
+    const validSymbols = new Set(Object.keys(ELEMENT_NAMES))
+    const result = {}
+    Object.keys(obj).forEach(key => {
+      if (validSymbols.has(key)) {
+        result[key] = obj[key]
+      }
+    })
+    return result
+  }, [])
+
   const applyReadingsSelection = useCallback((readingIds) => {
     const subset = readings.filter(r => readingIds.has(r.id))
     clearDrafts()
@@ -110,16 +123,78 @@ export function useReadings() {
       setElementValues({})
       setMachineBaseline({})
       setPrimaryValue(null)
+      setCustomerName('')
+      setSampleType('Silver Sample')
+      setWeight('')
+      setSampleCat('Gold')
       return
     }
 
-    const avgs = calculateAverages(readings, readingIds)
-    const newPrim = avgs[primKey] ?? 0
-    const normalizedAvgs = rebalanceCu(newPrim, avgs)
+    const firstReading = subset[0]
+    
+    if (firstReading.customer_name) {
+      setCustomerName(firstReading.customer_name)
+    }
+    
+    if (firstReading.sample_type) {
+      setSampleType(firstReading.sample_type)
+    }
+    
+    if (firstReading.weight != null) {
+      setWeight(String(firstReading.weight))
+    }
+    
+    let detectedCat = 'Gold'
+    if (firstReading.elements && Array.isArray(firstReading.elements)) {
+      const hasAu = firstReading.elements.some(el => el.name === 'Au' && el.value > 0)
+      const hasAg = firstReading.elements.some(el => el.name === 'Ag' && el.value > 0)
+      const hasPt = firstReading.elements.some(el => el.name === 'Pt' && el.value > 0)
+      
+      if (hasAu) detectedCat = 'Gold'
+      else if (hasAg) detectedCat = 'Silver'
+      else if (hasPt) detectedCat = 'Platinum'
+    }
+    setSampleCat(detectedCat)
+
+    const avgs = {}
+    const counts = {}
+    
+    subset.forEach(r => {
+      const elMap = {}
+      if (r.elements && Array.isArray(r.elements)) {
+        r.elements.forEach(el => {
+          if (ELEMENT_NAMES[el.name]) {
+            elMap[el.name] = el.value
+          }
+        })
+      }
+      READING_COLUMNS.forEach(sym => {
+        if (r[sym] !== undefined && elMap[sym] === undefined) {
+          if (ELEMENT_NAMES[sym]) {
+            elMap[sym] = r[sym]
+          }
+        }
+      })
+      
+      Object.keys(elMap).forEach(key => {
+        avgs[key] = (avgs[key] || 0) + (elMap[key] || 0)
+        counts[key] = (counts[key] || 0) + 1
+      })
+    })
+
+    const averagedValues = {}
+    Object.keys(avgs).forEach(key => {
+      averagedValues[key] = parseFloat((avgs[key] / counts[key]).toFixed(3))
+    })
+
+    const validAverages = filterValidElements(averagedValues)
+    
+    const newPrim = validAverages[primKey] ?? 0
+    const normalizedAvgs = rebalanceCu(newPrim, validAverages)
     setPrimaryValue(newPrim)
     setElementValues(normalizedAvgs)
     setMachineBaseline(normalizedAvgs)
-  }, [clearDrafts, primKey, readings, rebalanceCu])
+  }, [clearDrafts, primKey, readings, rebalanceCu, filterValidElements])
 
   const toggleReading = (id) => {
     setSelectedReadingIds(prev => {
@@ -141,6 +216,11 @@ export function useReadings() {
     setSelectedReadingIds(next)
     applyReadingsSelection(next)
   }
+
+  const handleSelectLastN = useCallback((selectedIds) => {
+    setSelectedReadingIds(selectedIds)
+    applyReadingsSelection(selectedIds)
+  }, [applyReadingsSelection])
 
   const handleElementChange = (name, raw) => {
     if (NON_EDITABLE_ELEMENTS.has(name)) return
@@ -215,7 +295,7 @@ export function useReadings() {
       errors.customerName = 'Customer name must be 2-120 characters.'
     }
 
-    if (!/^\d{10}$/.test(mobile)) {
+    if (mobile && !/^\d{10}$/.test(mobile)) {
       errors.mobile = 'Mobile number must be exactly 10 digits.'
     }
 
@@ -247,10 +327,10 @@ export function useReadings() {
       errors.elementSum = `Composition total must be close to 100. Current: ${formatCompact(elementSum)}`
     }
 
+    const validSymbols = new Set(Object.keys(ELEMENT_NAMES))
     for (const [symbol, raw] of Object.entries(elementValues || {})) {
-      if (!/^[A-Z][a-z]?$/.test(symbol)) {
-        errors.composition = 'Found invalid element symbol in composition.'
-        break
+      if (!validSymbols.has(symbol)) {
+        continue
       }
       const val = Number(raw)
       if (!Number.isFinite(val)) {
@@ -277,7 +357,7 @@ export function useReadings() {
     try {
       const payload = {
         customerName: customerName.trim() || 'Unknown',
-        itemDesc: `${sampleCat} ${sampleType} | Wt:${weight || '?'}g | ${mobile}`,
+        itemDesc: `${sampleCat} ${sampleType} | Wt:${weight || '?'}g | ${mobile || ''}`,
         testDate: date || null,
         readingIds: subset.map(r => r.id),
         composition: {
@@ -322,8 +402,16 @@ export function useReadings() {
         setSrNo(data.srNo)
       }
 
-      const finalPayload = { ...elementValues }
+      // Filter element values to only valid symbols before sending
+      const validSymbols = new Set(Object.keys(ELEMENT_NAMES))
+      const finalPayload = {}
+      Object.keys(elementValues).forEach(key => {
+        if (validSymbols.has(key)) {
+          finalPayload[key] = elementValues[key]
+        }
+      })
       finalPayload[primKey] = displayPrim
+      
       if (Object.keys(finalPayload).length > 0) {
         const machineDeltaRows = calculateDeltaRows(machineBaseline, elementValues, primKey, displayPrim)
         const changedDeltaRows = machineDeltaRows.filter(row => row.absDelta >= 0.001)
@@ -359,6 +447,12 @@ export function useReadings() {
       }
 
       setEditingSampleId(targetSampleId)
+
+      // After successful save, trigger a refresh of the reports queue
+      // This will notify the Reports page to refresh
+      window.dispatchEvent(new CustomEvent('sampleSaved', { 
+        detail: { sampleId: targetSampleId, srNo: data.srNo }
+      }))
 
       return { sampleId: targetSampleId, srNo: data.srNo, jobRef: data.jobRef }
     } catch (err) {
@@ -489,18 +583,24 @@ export function useReadings() {
         let elemVals = {}
         if (sample.finalResults && sample.finalResults.length > 0) {
           sample.finalResults.forEach(fr => {
-            elemVals[fr.element] = fr.expert_value ?? fr.auto_value
+            if (ELEMENT_NAMES[fr.element]) {
+              elemVals[fr.element] = fr.expert_value ?? fr.auto_value
+            }
           })
         } else if (sample.autoResults && sample.autoResults.length > 0) {
           sample.autoResults.forEach(ar => {
-            elemVals[ar.element] = ar.auto_value
+            if (ELEMENT_NAMES[ar.element]) {
+              elemVals[ar.element] = ar.auto_value
+            }
           })
         }
 
         const baselineVals = {}
         if (sample.autoResults && sample.autoResults.length > 0) {
           sample.autoResults.forEach(ar => {
-            baselineVals[ar.element] = ar.auto_value
+            if (ELEMENT_NAMES[ar.element]) {
+              baselineVals[ar.element] = ar.auto_value
+            }
           })
         }
         setMachineBaseline(baselineVals)
@@ -527,7 +627,12 @@ export function useReadings() {
 
   // Initial data fetch
   useEffect(() => {
-    fetch('/api/readings').then(r => r.json()).then(setReadings).catch(console.error)
+    fetch('/api/readings')
+      .then(r => r.json())
+      .then(data => {
+        setReadings(data)
+      })
+      .catch(console.error)
     if (!isLoadingEditRef.current) {
       fetchNextSrNo()
     }
@@ -553,8 +658,13 @@ export function useReadings() {
     })
   }, [sampleCat])
 
+  useEffect(() => {
+    if (customerName) {
+      clearFieldError('customerName')
+    }
+  }, [customerName, clearFieldError])
+
   return {
-    // State
     customerName, setCustomerName,
     mobile, setMobile,
     srNo, setSrNo,
@@ -576,8 +686,8 @@ export function useReadings() {
     editingSampleId, setEditingSampleId,
     isLoadingEditRef,
     nextItemTimerRef,
+    profileFilter, setProfileFilter,
     
-    // Computed
     primKey,
     displayPrim,
     impurity,
@@ -587,7 +697,6 @@ export function useReadings() {
     canPrint,
     machineDeltaRows: calculateDeltaRows(machineBaseline, elementValues, primKey, displayPrim),
     
-    // Actions
     rebalanceCu,
     clearDrafts,
     clearAllErrors,
@@ -598,6 +707,7 @@ export function useReadings() {
     toggleReading,
     selectAllReadings,
     clearReadings,
+    handleSelectLastN,
     handleElementChange,
     prepareNextItem,
     prepareFreshEntry,
