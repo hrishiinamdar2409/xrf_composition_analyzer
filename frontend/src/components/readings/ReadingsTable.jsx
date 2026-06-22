@@ -20,6 +20,41 @@ export default function ReadingsTable({
     return r.profile === profileFilter
   })
 
+  const getSelectedDateRange = () => {
+  const selected = readings.filter(r => selectedReadingIds.has(r.id));
+  if (!selected.length) return null;
+  
+  let minDate = null;
+  let maxDate = null;
+  
+  selected.forEach(r => {
+    let dateObj = null;
+    if (r.reading_date && r.reading_time) {
+      const dateStr = `${r.reading_date} ${r.reading_time}`;
+      const parsed = new Date(dateStr);
+      if (!isNaN(parsed.getTime())) {
+        dateObj = parsed;
+      }
+    } else if (r.reading_date) {
+      const parts = r.reading_date.split('-');
+      if (parts.length === 3) {
+        dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      }
+    } else if (r.arrived_at) {
+      dateObj = new Date(r.arrived_at);
+    }
+    
+    if (dateObj && !isNaN(dateObj.getTime())) {
+      if (!minDate || dateObj < minDate) minDate = dateObj;
+      if (!maxDate || dateObj > maxDate) maxDate = dateObj;
+    }
+  });
+  
+  return { minDate, maxDate };
+};
+
+const dateRange = getSelectedDateRange();
+
   // Sort readings: block descending, entry_index ascending
   const sortedReadings = [...filteredReadings].sort((a, b) => {
     const blockA = a.block || ''

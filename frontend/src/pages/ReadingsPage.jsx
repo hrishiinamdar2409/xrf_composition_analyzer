@@ -1,30 +1,45 @@
-import { Toaster } from 'react-hot-toast'
-import { useReadings } from '../hooks/useReadings'
-import SampleDetails from '../components/readings/SampleDetails'
-import ActionBar from '../components/readings/ActionBar'
-import CompositionPanel from '../components/readings/CompositionPanel'
-import ReadingsTable from '../components/readings/ReadingsTable'
-import { PRIMARY_ELEMENT } from '../constants/readingsConstants'
-import { calculateDeltaRows } from '../utils/readingsUtils'
+import { Toaster } from "react-hot-toast";
+import { useReadings } from "../hooks/useReadings";
+import SampleDetails from "../components/readings/SampleDetails";
+import ActionBar from "../components/readings/ActionBar";
+import CompositionPanel from "../components/readings/CompositionPanel";
+import ReadingsTable from "../components/readings/ReadingsTable";
+import { PRIMARY_ELEMENT } from "../constants/readingsConstants";
+import { calculateDeltaRows } from "../utils/readingsUtils";
 
 export default function ReadingsPage() {
   const {
-    customerName, setCustomerName,
-    mobile, setMobile,
-    srNo, setSrNo,
-    date, setDate,
-    sampleType, setSampleType,
-    weight, setWeight,
-    sampleCat, setSampleCat,
-    entryMode, setEntryMode,
-    formErrors, setFormErrors,
+    customerName,
+    setCustomerName,
+    mobile,
+    setMobile,
+    srNo,
+    setSrNo,
+    date,
+    setDate,
+    time,           // ✅ ADD THIS
+    setTime,        // ✅ ADD THIS
+    sampleType,
+    setSampleType,
+    weight,
+    setWeight,
+    sampleCat,
+    setSampleCat,
+    entryMode,
+    setEntryMode,
+    formErrors,
+    setFormErrors,
     readings,
     selectedReadingIds,
-    elementValues, setElementValues,
+    elementValues,
+    setElementValues,
     machineBaseline,
-    primaryValue, setPrimaryValue,
-    primaryDraft, setPrimaryDraft,
-    elementDrafts, setElementDrafts,
+    primaryValue,
+    setPrimaryValue,
+    primaryDraft,
+    setPrimaryDraft,
+    elementDrafts,
+    setElementDrafts,
     saving,
     printing,
     primKey,
@@ -48,14 +63,17 @@ export default function ReadingsPage() {
     profileFilter,
     setProfileFilter,
     handleSelectLastN,
-  } = useReadings()
+  } = useReadings();
 
-  const primaryDeltaRow = machineDeltaRows.find(row => row.sym === primKey) || null
-  const changedDeltaRows = machineDeltaRows.filter(row => row.absDelta >= 0.001)
+  const primaryDeltaRow =
+    machineDeltaRows.find((row) => row.sym === primKey) || null;
+  const changedDeltaRows = machineDeltaRows.filter(
+    (row) => row.absDelta >= 0.001,
+  );
 
   const handleReset = () => {
-    prepareFreshEntry()
-  }
+    prepareFreshEntry();
+  };
 
   return (
     <div className="w-full">
@@ -63,10 +81,8 @@ export default function ReadingsPage() {
 
       {/* TWO-COLUMN LAYOUT — 50 / 50 */}
       <div className="flex gap-3 items-start">
-
         {/* ── LEFT PANEL ──────────────────────────────── */}
         <div className="flex flex-col gap-3 w-1/2 min-w-0">
-
           {/* Sample Details */}
           <SampleDetails
             customerName={customerName}
@@ -75,6 +91,8 @@ export default function ReadingsPage() {
             setSampleCat={setSampleCat}
             date={date}
             setDate={setDate}
+            time={time}           // ✅ ADD THIS
+            setTime={setTime}     // ✅ ADD THIS
             sampleType={sampleType}
             setSampleType={setSampleType}
             srNo={srNo}
@@ -124,12 +142,11 @@ export default function ReadingsPage() {
             setElementDrafts={setElementDrafts}
             handleElementChange={handleElementChange}
           />
-
-        </div>{/* end LEFT PANEL */}
+        </div>
+        {/* end LEFT PANEL */}
 
         {/* ── RIGHT PANEL ─────────────────────────────── */}
         <div className="w-1/2 min-w-0">
-
           {/* Readings Table with Profile Filters */}
           <ReadingsTable
             readings={readings}
@@ -141,10 +158,9 @@ export default function ReadingsPage() {
             setProfileFilter={setProfileFilter}
             onSelectLastN={handleSelectLastN}
           />
-
-        </div>{/* end RIGHT PANEL */}
-
+        </div>
+        {/* end RIGHT PANEL */}
       </div>
     </div>
-  )
+  );
 }

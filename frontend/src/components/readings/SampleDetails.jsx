@@ -27,6 +27,8 @@ export default function SampleDetails({
   setSampleCat,
   date,
   setDate,
+  time,
+  setTime,
   sampleType,
   setSampleType,
   srNo,
@@ -82,6 +84,30 @@ export default function SampleDetails({
       : weight
   }
 
+  // Combine date and time into datetime-local string
+  const getDateTimeValue = () => {
+    if (date && time) {
+      return `${date}T${time}`
+    }
+    return ''
+  }
+
+  // Handle datetime-local change
+  const handleDateTimeChange = (e) => {
+    const value = e.target.value
+    if (value) {
+      const [datePart, timePart] = value.split('T')
+      setDate(datePart)
+      setTime(timePart)
+    } else {
+      setDate('')
+      setTime('')
+    }
+    clearFieldError('date')
+    clearFieldError('time')
+    clearFieldError('general')
+  }
+
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4">
       <p className="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">SAMPLE DETAILS</p>
@@ -120,21 +146,22 @@ export default function SampleDetails({
               </label>
             ))}
           </div>
+          {formErrors.sampleCat && <span className="text-xs text-red-400 mt-1 block">{formErrors.sampleCat}</span>}
         </Field>
 
-        {/* Field 3: Date Retrieval Input Box */}
-        <Field label="Date" required>
+        {/* Field 3: Date & Time Combined Input Box */}
+        <Field label="Date & Time" required>
           <input 
             className={INPUT} 
-            type="date" 
-            value={date || ''} 
-            onChange={e => { 
-              setDate(e.target.value)
-              clearFieldError('date')
-              clearFieldError('general')
-            }} 
+            type="datetime-local"
+            value={getDateTimeValue()} 
+            onChange={handleDateTimeChange}
           />
-          {formErrors.date && <span className="text-xs text-red-400 mt-1 block">{formErrors.date}</span>}
+          {(formErrors.date || formErrors.time) && (
+            <span className="text-xs text-red-400 mt-1 block">
+              {formErrors.date || formErrors.time}
+            </span>
+          )}
         </Field>
 
         {/* Field 4: Sample Type Custom Selector Dropdown */}

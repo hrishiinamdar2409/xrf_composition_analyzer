@@ -25,6 +25,7 @@ export function useReadings() {
   const [mobile, setMobile] = useState("");
   const [srNo, setSrNo] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState(new Date().toTimeString().slice(0, 8));
   const [sampleType, setSampleType] = useState("Gold Sample");
   const [weight, setWeight] = useState("");
   const [sampleCat, setSampleCat] = useState("Gold");
@@ -126,6 +127,53 @@ export function useReadings() {
     return result;
   }, []);
 
+  // Helper to get max date and time from selected readings
+  const getMaxDateTimeFromReadings = useCallback(
+    (readingIds) => {
+      const subset = readings.filter((r) => readingIds.has(r.id));
+      if (!subset.length) return null;
+
+      let maxDateTime = null;
+
+      subset.forEach((r) => {
+        let readingDateTime = null;
+
+        // Try to get date and time from reading_date + reading_time
+        if (r.reading_date && r.reading_time) {
+          // Format: DD-MM-YYYY HH:MM:SS
+          const parts = r.reading_date.split("-");
+          if (parts.length === 3) {
+            // Convert DD-MM-YYYY to YYYY-MM-DD for JavaScript Date
+            const isoDateStr = `${parts[2]}-${parts[1]}-${parts[0]}T${r.reading_time}`;
+            const parsed = new Date(isoDateStr);
+            if (!isNaN(parsed.getTime())) {
+              readingDateTime = parsed;
+            }
+          }
+        }
+
+        // Fallback to arrived_at if reading_date/time not available
+        if (!readingDateTime && r.arrived_at) {
+          const dateObj = new Date(r.arrived_at);
+          if (!isNaN(dateObj.getTime())) {
+            readingDateTime = dateObj;
+          }
+        }
+
+        // Update max date/time
+        if (
+          readingDateTime &&
+          (!maxDateTime || readingDateTime > maxDateTime)
+        ) {
+          maxDateTime = readingDateTime;
+        }
+      });
+
+      return maxDateTime;
+    },
+    [readings],
+  );
+
   const applyReadingsSelection = useCallback(
     (readingIds) => {
       const subset = readings.filter((r) => readingIds.has(r.id));
@@ -136,9 +184,13 @@ export function useReadings() {
         setMachineBaseline({});
         setPrimaryValue(null);
         setCustomerName("");
-        setSampleType("Silver Sample");
+        setSampleType("Gold Sample");
         setWeight("");
         setSampleCat("Gold");
+        // Reset date to today and time to current time when no readings selected
+        const now = new Date();
+        setDate(now.toISOString().slice(0, 10));
+        setTime(now.toTimeString().slice(0, 8));
         return;
       }
 
@@ -159,31 +211,25 @@ export function useReadings() {
         setWeight(String(firstReading.weight));
       }
 
-      // Auto-populate Date from reading_date
-      if (firstReading.reading_date) {
-        // Format date to YYYY-MM-DD
-        const dateObj = new Date(firstReading.reading_date);
-        if (!isNaN(dateObj.getTime())) {
-          setDate(dateObj.toISOString().slice(0, 10));
-        }
-      } else if (firstReading.arrived_at) {
-        // Fallback to arrived_at if reading_date not available
-        const dateObj = new Date(firstReading.arrived_at);
-        if (!isNaN(dateObj.getTime())) {
-          setDate(dateObj.toISOString().slice(0, 10));
-        }
-      } else if (firstReading.created_at) {
-        // Fallback to created_at if reading_date not available
-        const dateObj = new Date(firstReading.created_at);
-        if (!isNaN(dateObj.getTime())) {
-          setDate(dateObj.toISOString().slice(0, 10));
-        }
-      } else if (firstReading.created_at) {
-        // Fallback to created_at if reading_date not available
-        const dateObj = new Date(firstReading.created_at);
-        if (!isNaN(dateObj.getTime())) {
-          setDate(dateObj.toISOString().slice(0, 10));
-        }
+      // --- Get max date and time from all selected readings ---
+      const maxDateTime = getMaxDateTimeFromReadings(readingIds);
+      if (maxDateTime) {
+        // Format date to YYYY-MM-DD for the date input
+        const year = maxDateTime.getFullYear();
+        const month = String(maxDateTime.getMonth() + 1).padStart(2, "0");
+        const day = String(maxDateTime.getDate()).padStart(2, "0");
+        setDate(`${year}-${month}-${day}`);
+
+        // Format time to HH:MM:SS for the time input
+        const hours = String(maxDateTime.getHours()).padStart(2, "0");
+        const minutes = String(maxDateTime.getMinutes()).padStart(2, "0");
+        const seconds = String(maxDateTime.getSeconds()).padStart(2, "0");
+        setTime(`${hours}:${minutes}:${seconds}`);
+      } else {
+        // Fallback to current date/time if no valid date found
+        const now = new Date();
+        setDate(now.toISOString().slice(0, 10));
+        setTime(now.toTimeString().slice(0, 8));
       }
 
       // Detect category from sample type
@@ -245,7 +291,14 @@ export function useReadings() {
       setElementValues(normalizedAvgs);
       setMachineBaseline(normalizedAvgs);
     },
-    [clearDrafts, primKey, readings, rebalanceCu, filterValidElements],
+    [
+      clearDrafts,
+      primKey,
+      readings,
+      rebalanceCu,
+      filterValidElements,
+      getMaxDateTimeFromReadings,
+    ],
   );
 
   const toggleReading = (id) => {
@@ -291,8 +344,10 @@ export function useReadings() {
   const prepareNextItem = useCallback(() => {
     isLoadingEditRef.current = false;
     setSrNo("");
-    setDate(new Date().toISOString().slice(0, 10));
-    setSampleType("Silver Sample");
+    const now = new Date();
+    setDate(now.toISOString().slice(0, 10));
+    setTime(now.toTimeString().slice(0, 8));
+    setSampleType("Gold Sample");
     setWeight("");
     setElementValues({});
     setMachineBaseline({});
@@ -309,7 +364,9 @@ export function useReadings() {
     setCustomerName("");
     setMobile("");
     setSrNo("");
-    setDate(new Date().toISOString().slice(0, 10));
+    const now = new Date();
+    setDate(now.toISOString().slice(0, 10));
+    setTime(now.toTimeString().slice(0, 8));
     setWeight("");
     setSampleCat("Gold");
     setSampleType("Silver Sample");
@@ -362,8 +419,13 @@ export function useReadings() {
       errors.weight = "Weight must be greater than 0.";
     }
 
+    // Validate date and time together
     if (!date || !isValidIsoDate(date)) {
       errors.date = "Date must be a valid YYYY-MM-DD value.";
+    }
+
+    if (!time) {
+      errors.time = "Time is required.";
     }
 
     if (!sampleType || sampleType.trim().length < 2) {
@@ -409,6 +471,7 @@ export function useReadings() {
     mobile,
     weight,
     date,
+    time,
     sampleType,
     selectedReadingIds,
     hasComposition,
@@ -430,6 +493,7 @@ export function useReadings() {
         customerName: customerName.trim() || "Unknown",
         itemDesc: `${sampleCat} ${sampleType} | Wt:${weight || "?"}g | ${mobile || ""}`,
         testDate: date || null,
+        testTime: time || null,
         readingIds: subset.map((r) => r.id),
         composition: {
           primaryElement: primKey,
@@ -557,6 +621,7 @@ export function useReadings() {
     weight,
     mobile,
     date,
+    time,
     primKey,
     displayPrim,
     elementValues,
@@ -670,6 +735,10 @@ export function useReadings() {
         setDate(
           sample.created_at?.slice(0, 10) ||
             new Date().toISOString().slice(0, 10),
+        );
+        setTime(
+          sample.created_at?.slice(11, 19) ||
+            new Date().toTimeString().slice(0, 8),
         );
 
         let parsedCat = "Gold";
@@ -808,6 +877,8 @@ export function useReadings() {
     setSrNo,
     date,
     setDate,
+    time,
+    setTime,
     sampleType,
     setSampleType,
     weight,
