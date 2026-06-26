@@ -79,7 +79,8 @@ export function useReadings() {
   const rebalanceCu = useCallback(
     (newPrim, elValues) => {
       const sumOthers = Object.entries(elValues)
-        .filter(([k]) => k !== "Cu" && k !== primKey)
+        // 💡 FIX: Exclude "x1" and "mq" alongside "Cu" and the primKey
+        .filter(([k]) => k !== "Cu" && k !== primKey && k !== "x1" && k !== "mq")
         .reduce((s, [, v]) => s + (v || 0), 0);
       return {
         ...elValues,
@@ -89,6 +90,7 @@ export function useReadings() {
     [primKey],
   );
 
+  
   const clearDrafts = useCallback(() => {
     setPrimaryDraft(null);
     setElementDrafts({});
@@ -536,7 +538,7 @@ export function useReadings() {
 
       try {
         data = await res.json();
-      } catch (_) {}
+      } catch (_) { }
 
       if (!res.ok || !data?.id) {
         const mapped = mapServerErrors(data);
@@ -602,8 +604,8 @@ export function useReadings() {
           }
           throw new Error(
             resultBody?.detail ||
-              resultBody?.error ||
-              "Could not save composition adjustments.",
+            resultBody?.error ||
+            "Could not save composition adjustments.",
           );
         }
       }
@@ -747,11 +749,11 @@ export function useReadings() {
         setSrNo(sample.job_ref || "");
         setDate(
           sample.created_at?.slice(0, 10) ||
-            new Date().toISOString().slice(0, 10),
+          new Date().toISOString().slice(0, 10),
         );
         setTime(
           sample.created_at?.slice(11, 19) ||
-            new Date().toTimeString().slice(0, 8),
+          new Date().toTimeString().slice(0, 8),
         );
 
         let parsedCat = "Gold";

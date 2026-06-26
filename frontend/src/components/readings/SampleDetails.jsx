@@ -147,7 +147,7 @@ export default function SampleDetails({
               clearFieldError('customerName')
               clearFieldError('general')
             }} 
-            placeholder="e.g. Raj Jewellers" 
+            placeholder="name" 
           />
           {formErrors.customerName && <span className="text-xs text-red-400 mt-1 block">{formErrors.customerName}</span>}
         </Field>

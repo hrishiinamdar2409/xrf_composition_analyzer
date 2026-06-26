@@ -11,7 +11,7 @@ export const INCREMENT_STEPS = [
   { label: '+0.1', delta: 0.1 },
   { label: '+0.2', delta: 0.2 },
   { label: '+0.3', delta: 0.3 },
-  { label: 'UR', snap: 'upper_range' },
+  
 ]
 
 export const DECREMENT_STEPS = [
@@ -19,7 +19,7 @@ export const DECREMENT_STEPS = [
   { label: '-0.1', delta: -0.1 },
   { label: '-0.2', delta: -0.2 },
   { label: '-0.3', delta: -0.3 },
-  { label: 'UL', snap: 'upper_limit' },
+  
 ]
 
 export const UPPER_RANGE = { Gold: 99.9, Silver: 99.9, Platinum: 99.9 }
@@ -32,16 +32,30 @@ export const ENTRY_MODE = {
 
 // Full friendly names for every element the machine can return - ADDED x1
 export const ELEMENT_NAMES = {
-  Au: 'Gold', Ag: 'Silver', Cu: 'Copper', Zn: 'Zinc',
-  Cd: 'Cadmium', Ni: 'Nickel', Bi: 'Bismuth', As: 'Arsenic',
-  Ir: 'Iridium', Ru: 'Ruthenium', Os: 'Osmium', Re: 'Rhenium',
-  Fe: 'Iron', Pd: 'Palladium', Sn: 'Tin', Pb: 'Lead',
-  W: 'Tungsten', Pt: 'Platinum', Co: 'Cobalt', Rh: 'Rhodium',
-  Cr: 'Chromium', Mn: 'Manganese', Ti: 'Titanium', In: 'Indium',
-  Sb: 'Antimony', Te: 'Tellurium', Se: 'Selenium', Mo: 'Molybdenum',
-  Nb: 'Niobium', Hf: 'Hafnium', Ta: 'Tantalum', V: 'Vanadium',
-  x1: 'Karat',
-}
+  Au: 'Gold',
+  Ag: 'Silver',
+  Cu: 'Copper',
+  Zn: 'Zinc',
+  Ni: 'Nickel',
+  Cd: 'Cadmium',
+  In: 'Indium',
+  Ir: 'Iridium',
+  Ru: 'Ruthenium',
+  Rh: 'Rhodium',
+  Pd: 'Palladium',
+  Fe: 'Iron',
+  Pt: 'Platinum',
+  Os: 'Osmium',
+  Re: 'Rhenium',
+  Co: 'Cobalt',
+  Ga: 'Gallium',
+  Sn: 'Tin',
+  Pb: 'Lead',
+  Bi: 'Bismuth',
+  W:  'Tungsten',
+  Sb: 'Antimony',
+  x1: 'Karat'
+};
 
 // Fixed ordered columns for the readings table - Updated to include mq and x1
 export const READING_COLUMNS = [
@@ -53,7 +67,7 @@ export const READING_COLUMNS = [
 
 // Element groups grid array - ADDED 'Karat' to the end of the last column group
 export const ALL_ELEMENT_GROUPS = [
-  ['Silver', 'Copper', 'Zinc', 'Cadmium', 'Nickel', 'Indium'],
-  ['Iron', 'Tin', 'Iridium', 'Ruthenium', 'Osmium', 'Rhenium'],
-  ['Cobalt', 'Lead', 'Chromium', 'Platinum', 'Palladium', 'Rhodium', 'Karat'],
-]
+  ['Gold', 'Silver', 'Copper', 'Zinc', 'Cadmium', 'Nickel', 'Indium'],
+  ['Iron', 'Tin', 'Iridium', 'Ruthenium', 'Osmium', 'Rhenium', 'Cobalt'],
+  ['Lead', 'Gallium', 'Platinum', 'Palladium', 'Rhodium', 'Bismuth', 'Tungsten']
+];
