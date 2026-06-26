@@ -74,14 +74,29 @@ export const READING_COLUMNS = [
   'mq', 'x1'
 ]
 
-// Element groups grid array - ADDED 'Karat' to the end of the last column group
-export const ALL_ELEMENT_GROUPS = [
-  // Column 1: Core Alloys (7 Elements)
-  ["Silver", "Copper", "Zinc", "Nickel", "Cadmium", "Indium", "Iron"],
+export const getAllElementGroups = (sampleCat) => {
+  // 💡 FIX: Added "Iron" to the pool so it has all 15 base alloy elements
+  const allBaseElements = [
+    "Gold", "Silver", "Copper", "Zinc", "Nickel", 
+    "Cadmium", "Indium", "Iron", "Cobalt", "Gallium", 
+    "Tin", "Lead", "Bismuth", "Platinum", "Palladium"
+  ];
 
-  // Column 2: ALL POWDERED / SCAM ADULTERANTS (7 Elements)
-  ["Iridium", "Ruthenium", "Osmium", "Rhenium", "Rhodium", "Antimony", "Tungsten"], // 💡 MOVE: Tungsten is now safely grouped here!
+  // Filter out whichever element is currently the active primary category header
+  const availableElements = allBaseElements.filter(name => name !== sampleCat);
 
-  // Column 3: Remaining Base & Precious Elements (7 Elements)
-  ["Cobalt", "Gallium", "Tin", "Lead", "Bismuth", "Platinum", "Palladium"] // Cobalt moved here to maintain 7 items
-];
+  // Split them evenly into chunks of 7
+  const col1 = availableElements.slice(0, 7);
+  const col3 = availableElements.slice(7, 14);
+
+  return [
+    // Column 1: Exactly 7 elements
+    col1,
+
+    // Column 2: ALL POWDERED / SCAM ADULTERANTS (Always locked at 7 items)
+    ["Iridium", "Ruthenium", "Osmium", "Rhenium", "Rhodium", "Antimony", "Tungsten"],
+
+    // Column 3: Exactly 7 elements
+    col3
+  ];
+};

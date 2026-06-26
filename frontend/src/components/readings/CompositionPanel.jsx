@@ -5,7 +5,7 @@ import {
   ELEMENT_NAMES,
   NON_EDITABLE_ELEMENTS,
   POWDER_ELEMENTS,
-  ALL_ELEMENT_GROUPS
+  getAllElementGroups
 } from '../../constants/readingsConstants'
 import { formatSigned, deltaTone, nameToSymbolMap } from '../../utils/readingsUtils'
 
@@ -40,14 +40,7 @@ export default function CompositionPanel({
 
   // Filter out the primary element from ALL_ELEMENT_GROUPS
   const primaryElementName = ELEMENT_NAMES[primKey] || primKey
-  const filteredElementGroups = ALL_ELEMENT_GROUPS.map(group =>
-    group.filter(name => {
-      if (name === primaryElementName) return false
-      const sym = nameToSym[name] || name
-      if (sym === primKey) return false
-      return true
-    })
-  ).filter(group => group.length > 0)
+  const filteredElementGroups = getAllElementGroups(sampleCat);
 
   // Granular decimal formatters
   const formatTo3Decimals = (val) => {
