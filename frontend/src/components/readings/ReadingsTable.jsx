@@ -21,39 +21,39 @@ export default function ReadingsTable({
   })
 
   const getSelectedDateRange = () => {
-  const selected = readings.filter(r => selectedReadingIds.has(r.id));
-  if (!selected.length) return null;
-  
-  let minDate = null;
-  let maxDate = null;
-  
-  selected.forEach(r => {
-    let dateObj = null;
-    if (r.reading_date && r.reading_time) {
-      const dateStr = `${r.reading_date} ${r.reading_time}`;
-      const parsed = new Date(dateStr);
-      if (!isNaN(parsed.getTime())) {
-        dateObj = parsed;
-      }
-    } else if (r.reading_date) {
-      const parts = r.reading_date.split('-');
-      if (parts.length === 3) {
-        dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-      }
-    } else if (r.arrived_at) {
-      dateObj = new Date(r.arrived_at);
-    }
-    
-    if (dateObj && !isNaN(dateObj.getTime())) {
-      if (!minDate || dateObj < minDate) minDate = dateObj;
-      if (!maxDate || dateObj > maxDate) maxDate = dateObj;
-    }
-  });
-  
-  return { minDate, maxDate };
-};
+    const selected = readings.filter(r => selectedReadingIds.has(r.id));
+    if (!selected.length) return null;
 
-const dateRange = getSelectedDateRange();
+    let minDate = null;
+    let maxDate = null;
+
+    selected.forEach(r => {
+      let dateObj = null;
+      if (r.reading_date && r.reading_time) {
+        const dateStr = `${r.reading_date} ${r.reading_time}`;
+        const parsed = new Date(dateStr);
+        if (!isNaN(parsed.getTime())) {
+          dateObj = parsed;
+        }
+      } else if (r.reading_date) {
+        const parts = r.reading_date.split('-');
+        if (parts.length === 3) {
+          dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        }
+      } else if (r.arrived_at) {
+        dateObj = new Date(r.arrived_at);
+      }
+
+      if (dateObj && !isNaN(dateObj.getTime())) {
+        if (!minDate || dateObj < minDate) minDate = dateObj;
+        if (!maxDate || dateObj > maxDate) maxDate = dateObj;
+      }
+    });
+
+    return { minDate, maxDate };
+  };
+
+  const dateRange = getSelectedDateRange();
 
   // Sort readings: block descending, entry_index ascending
   const sortedReadings = [...filteredReadings].sort((a, b) => {
@@ -164,7 +164,7 @@ const dateRange = getSelectedDateRange();
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      
+
       {/* 1. PROFILE FILTER PANEL (COMPLETELY UNTOUCHED ORIGINALS) */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -173,11 +173,10 @@ const dateRange = getSelectedDateRange();
           </span>
           <button
             onClick={() => setProfileFilter('ALL')}
-            className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
-              profileFilter === 'ALL'
-                ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
-                : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
-            }`}
+            className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${profileFilter === 'ALL'
+              ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
+              : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+              }`}
           >
             ALL
           </button>
@@ -185,22 +184,20 @@ const dateRange = getSelectedDateRange();
             <button
               key={profile}
               onClick={() => setProfileFilter(profile)}
-              className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
-                profileFilter === profile
-                  ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
-                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
-              }`}
+              className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${profileFilter === profile
+                ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
+                : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+                }`}
             >
               {profile}
             </button>
           ))}
           <button
             onClick={() => setProfileFilter('DATA')}
-            className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${
-              profileFilter === 'DATA'
-                ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
-                : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
-            }`}
+            className={`h-7 px-3 rounded text-xs font-semibold border transition-all active:scale-95 ${profileFilter === 'DATA'
+              ? 'bg-[#1a73ca] text-white border-[#1a73ca]'
+              : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+              }`}
           >
             DATA
           </button>
@@ -219,8 +216,27 @@ const dateRange = getSelectedDateRange();
               {selectedReadingIds.size} of {sortedReadings.length} selected
             </span>
             <div className="flex items-center gap-1">
-              <button onClick={selectAllReadings}
-                className="px-2.5 h-6 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 rounded border border-slate-200 transition-colors">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+
+                  // Check if everything in the current view is already selected
+                  const allSelected = sortedReadings.every(r => selectedReadingIds.has(r.id));
+
+                  if (allSelected) {
+                    // If everything is selected, clear only this section
+                    sortedReadings.forEach(r => {
+                      if (selectedReadingIds.has(r.id)) toggleReading(r.id);
+                    });
+                  } else {
+                    // Otherwise, select only items in this section that aren't selected yet
+                    sortedReadings.forEach(r => {
+                      if (!selectedReadingIds.has(r.id)) toggleReading(r.id);
+                    });
+                  }
+                }}
+                className="px-2.5 h-6 text-xs font-medium bg-white hover:bg-slate-50 text-slate-700 rounded border border-slate-200 transition-colors"
+              >
                 All
               </button>
               <button onClick={clearReadings}
@@ -235,18 +251,17 @@ const dateRange = getSelectedDateRange();
         <div className="flex items-center gap-1.5 mb-4">
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mr-1">LAST</span>
           {[1, 2, 3, 4, 5, 6, 8, 10].map(n => {
-            const isButtonActive = selectedReadingIds.size === n && 
+            const isButtonActive = selectedReadingIds.size === n &&
               [...selectedReadingIds].every(id => sortedReadings.slice(0, n).some(r => r.id === id))
 
             return (
               <button key={n}
                 onClick={() => handleSelectLastN(n)}
                 disabled={sortedReadings.length < n}
-                className={`h-6 w-9 rounded text-xs font-mono border font-bold transition-all disabled:opacity-20 ${
-                  isButtonActive
-                    ? 'bg-[#1a73ca] text-white border-[#1a73ca] shadow-sm shadow-[#1a73ca]/20'
-                    : 'bg-slate-50 text-[#1a73ca] border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-                }`}>
+                className={`h-6 w-9 rounded text-xs font-mono border font-bold transition-all disabled:opacity-20 ${isButtonActive
+                  ? 'bg-[#1a73ca] text-white border-[#1a73ca] shadow-sm shadow-[#1a73ca]/20'
+                  : 'bg-slate-50 text-[#1a73ca] border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                  }`}>
                 {n}
               </button>
             )
@@ -260,14 +275,33 @@ const dateRange = getSelectedDateRange();
             <thead className="bg-slate-50 text-slate-600 uppercase text-[10px] tracking-wider font-bold select-none border-b border-slate-300 sticky top-0 z-10 shadow-[0_1px_0_0_rgba(203,213,225,1)]">
               <tr>
                 <th className="p-2 w-10 text-center border-r border-slate-200 bg-slate-50">
-                  <input type="checkbox"
-                    checked={isAllVisibleSelected}
-                    onChange={() => isAllVisibleSelected ? clearReadings() : selectAllReadings()}
+                  <input
+                    type="checkbox"
+                    // Checked if every visible row is currently selected
+                    checked={sortedReadings.length > 0 && sortedReadings.every(r => selectedReadingIds.has(r.id))}
+                    onChange={(e) => {
+                      e.stopPropagation();
+
+                      // Check if everything in the current view is already selected
+                      const allVisibleSelected = sortedReadings.every(r => selectedReadingIds.has(r.id));
+
+                      if (allVisibleSelected) {
+                        // If already selected, clear the section
+                        sortedReadings.forEach(r => {
+                          if (selectedReadingIds.has(r.id)) toggleReading(r.id);
+                        });
+                      } else {
+                        // Otherwise, select the section
+                        sortedReadings.forEach(r => {
+                          if (!selectedReadingIds.has(r.id)) toggleReading(r.id);
+                        });
+                      }
+                    }}
                     className="w-3.5 h-3.5 cursor-pointer rounded accent-slate-700"
                   />
                 </th>
                 <th className="p-2 text-slate-700 border-r border-slate-200 whitespace-nowrap bg-slate-50">SAMPLE NO</th>
-                
+
                 {/* Dynamic Element Sequence Columns Loop */}
                 {READING_COLUMNS.map(sym => (
                   <th key={sym} className="px-3 py-2 text-right text-slate-800 font-bold border-r border-slate-200 whitespace-nowrap bg-slate-50">
@@ -284,7 +318,7 @@ const dateRange = getSelectedDateRange();
                 <th className="p-2 text-slate-700 whitespace-nowrap bg-slate-50 min-w-[140px]">DATE & TIME</th>
               </tr>
             </thead>
-            
+
             <tbody className="text-xs divide-y divide-slate-200 bg-white">
               {sortedReadings.length === 0 ? (
                 <tr>
@@ -296,15 +330,15 @@ const dateRange = getSelectedDateRange();
                 blockKeys.map(blockName => {
                   const blockReadings = groupedByBlock[blockName]
                   const isBlockAllSelected = blockReadings.every(r => selectedReadingIds.has(r.id))
-                  
+
                   return (
                     <React.Fragment key={blockName}>
                       {/* Light Block Separator Header */}
                       <tr className="bg-slate-100/60 border-y border-slate-200 select-none">
                         <td className="p-1.5 text-center border-r border-slate-200">
-                          <input 
-                            type="checkbox" 
-                            checked={isBlockAllSelected} 
+                          <input
+                            type="checkbox"
+                            checked={isBlockAllSelected}
                             onChange={() => toggleBlockSelection(blockReadings)}
                             className="w-3.5 h-3.5 cursor-pointer rounded accent-slate-700"
                           />
@@ -321,9 +355,8 @@ const dateRange = getSelectedDateRange();
                         return (
                           <tr key={r.id}
                             onClick={() => toggleReading(r.id)}
-                            className={`transition-colors border-b border-slate-100 cursor-pointer ${
-                              isSelected ? 'bg-slate-100/70 font-semibold' : 'hover:bg-slate-50/50'
-                            }`}>
+                            className={`transition-colors border-b border-slate-100 cursor-pointer ${isSelected ? 'bg-slate-100/70 font-semibold' : 'hover:bg-slate-50/50'
+                              }`}>
                             <td className="p-2 text-center border-r border-slate-200" onClick={e => e.stopPropagation()}>
                               <input type="checkbox" checked={isSelected} onChange={() => toggleReading(r.id)}
                                 className="w-3.5 h-3.5 cursor-pointer rounded accent-slate-700" />
@@ -368,7 +401,7 @@ const dateRange = getSelectedDateRange();
               {selectedReadingIds.size > 0 && (() => {
                 const subset = sortedReadings.filter(r => selectedReadingIds.has(r.id))
                 const sums = {}, counts = {}
-                
+
                 subset.forEach(r => {
                   READING_COLUMNS.forEach(sym => {
                     const val = getElementValue(r, sym)
@@ -376,14 +409,14 @@ const dateRange = getSelectedDateRange();
                     counts[sym] = (counts[sym] || 0) + 1
                   })
                 })
-                
+
                 return (
                   <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold select-none sticky bottom-0 z-10 shadow-[0_-1px_0_0_rgba(203,213,225,1)]">
                     <td className="p-2 border-r border-slate-200 bg-slate-50" />
                     <td className="p-2 text-slate-800 text-[10px] uppercase tracking-wider font-bold text-center border-r border-slate-200 bg-slate-50">
                       AVG ({selectedReadingIds.size})
                     </td>
-                    
+
                     {/* Aligned Summary Calculations Column Outputs */}
                     {READING_COLUMNS.map(sym => {
                       const avg = sums[sym] != null ? sums[sym] / counts[sym] : 0
