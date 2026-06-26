@@ -60,7 +60,7 @@ backend/*.db-wal
 # ==========================================
 # Local runtime settings
 # ==========================================
-settings.json
+# settings.json
 
 # ==========================================
 # Temporary files

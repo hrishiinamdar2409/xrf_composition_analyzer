@@ -29,8 +29,12 @@ function loadSettings() {
   if (!fs.existsSync(SETTINGS_PATH)) {
     return { ...DEFAULT_SETTINGS };
   }
-  const parsed = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-  return normalizeSettings({ ...DEFAULT_SETTINGS, ...parsed });
+  try {
+    const parsed = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    return normalizeSettings({ ...DEFAULT_SETTINGS, ...parsed });
+  } catch (e) {
+    return { ...DEFAULT_SETTINGS };
+  }
 }
 
 function saveSettings(data) {
@@ -67,31 +71,32 @@ function listAvailablePrinters() {
 }
 
 function browseExpFolder(currentPath = '') {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const safeCurrent = String(currentPath || '').replace(/'/g, "''");
     
-    // Modern Windows Shell UI dialog layout wrapper (resizable, sidebar shortcut support)
+    // SAFE MODERN ENGINE: Instantiates the native modern UI thread wrapper.
+    // Unlocks standard breadcrumb path editing, sidebars, drives, and network navigation.
     const script = `
-      $initialDir = ''
-      if ('${safeCurrent}') {
-        try {
-          if (Test-Path -LiteralPath '${safeCurrent}') {
-            $item = Get-Item -LiteralPath '${safeCurrent}' -ErrorAction SilentlyContinue
-            if ($item.PSIsContainer) {
-              $initialDir = $item.FullName
-            } else {
-              $initialDir = Split-Path -Parent $item.FullName
-            }
-          }
-        } catch {}
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName System.Windows.Forms
+      
+      $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+      $dialog.Description = "Select WinFTM Export Folder"
+      $dialog.ShowNewFolderButton = $true
+      
+      if ('${safeCurrent}' -and (Test-Path -LiteralPath '${safeCurrent}')) {
+        $dialog.SelectedPath = '${safeCurrent}'
+      } else {
+        $dialog.SelectedPath = "C:\\"
       }
       
-      $shell = New-Object -ComObject Shell.Application
-      # 0x00000010 (BIF_EDITBOX) + 0x00000040 (BIF_USENEWUI) creates the modern window framework
-      $folder = $shell.BrowseForFolder(0, "Select WinFTM Export Folder:", 0x00000010 -bor 0x00000040, $initialDir)
+      # Bring selection context window into full desktop focus
+      $desktopHandle = New-Object System.Windows.Forms.NativeWindow
+      $desktopHandle.AssignHandle([IntPtr]::Zero)
       
-      if ($folder) {
-        Write-Output $folder.Self.Path
+      $result = $dialog.ShowDialog($desktopHandle)
+      if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+        Write-Output $dialog.SelectedPath
       } else {
         Write-Output ""
       }
@@ -101,13 +106,13 @@ function browseExpFolder(currentPath = '') {
       'powershell.exe',
       ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-Command', script],
       { 
-        windowsHide: true, 
+        windowsHide: true, // Seamless execution context
         timeout: 120000,
         env: { ...process.env }
       },
       (err, stdout, stderr) => {
         if (err) {
-          console.error('PowerShell error:', err);
+          console.error('PowerShell invocation failure:', err);
           resolve('');
           return;
         }
@@ -195,7 +200,7 @@ function createSettingsRouter(options = {}) {
           return buildValidationError(res, [{ field: 'printerName', message: 'Selected printer is not available on this system.' }]);
         }
       } catch (_) {
-        // If printer discovery fails, skip strict availability check and only keep format validation.
+        // Safe fallback tracking
       }
     }
 

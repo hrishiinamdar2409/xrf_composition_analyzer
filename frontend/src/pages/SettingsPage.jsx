@@ -124,7 +124,6 @@ export default function SettingsPage() {
     const exp = String(draft?.expFilePath || '').trim()
     const printer = String(draft?.printerName || '').trim()
 
-    // Validates absolute Windows path (e.g. C:\Folder) without requiring a specific file extension
     if (!/^[a-zA-Z]:\\/.test(exp)) next.expFilePath = 'Use an absolute Windows directory path (e.g. C:\\FischerExport).'
     else if (exp.length > 260) next.expFilePath = 'Path is too long (max 260 characters).'
 
@@ -180,6 +179,10 @@ export default function SettingsPage() {
   const browseExpPath = async () => {
     console.log('Browse button clicked')
     
+    // FUNCTIONAL FIX: Instantly grab the path value from fallback contexts 
+    // to bypass React state re-render latencies.
+    const currentPath = draft?.expFilePath || settings?.expFilePath || ''
+    
     if (!isEditing) {
       console.log('Not in edit mode, enabling edit mode first')
       setIsEditing(true)
@@ -189,13 +192,11 @@ export default function SettingsPage() {
     toast.loading('Opening folder browser...', { id: 'browse' })
     
     try {
-      const currentPath = draft?.expFilePath || ''
       console.log('Current path:', currentPath)
       
       const response = await fetch(API.browse, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Explicitly requesting directory mode from your backend file picker
         body: JSON.stringify({ currentPath, mode: 'directory' }),
       })
       
@@ -216,7 +217,13 @@ export default function SettingsPage() {
       
       if (!data.cancelled && data.path) {
         console.log('Selected directory path:', data.path)
-        update('expFilePath', data.path)
+        
+        // Ensure draft baseline is structurally defined if click happened from View mode
+        setDraft(prev => ({
+          ...(prev || settings || { printerName: '' }),
+          expFilePath: data.path
+        }))
+        
         clearError('expFilePath')
         toast.success('Folder path selected', { id: 'browse' })
       } else if (data.cancelled) {
@@ -261,7 +268,7 @@ export default function SettingsPage() {
     )
   }
 
-  const printerMissing = Boolean(draft.printerName) && !printers.includes(draft.printerName)
+  const printerMissing = Boolean(draft?.printerName) && !printers.includes(draft?.printerName)
 
   // ── Configuration screen ─────────────────────────────────────────
   return (
@@ -334,7 +341,7 @@ export default function SettingsPage() {
             <input
               id="exp-path"
               type="text"
-              value={draft.expFilePath || ''}
+              value={draft?.expFilePath || ''}
               onChange={e => { update('expFilePath', e.target.value); clearError('expFilePath') }}
               disabled={!isEditing}
               aria-invalid={Boolean(errors.expFilePath)}
@@ -380,7 +387,7 @@ export default function SettingsPage() {
           <label htmlFor="printer-name" className="text-xs font-semibold text-slate-600">Select printer</label>
           <select
             id="printer-name"
-            value={draft.printerName || ''}
+            value={draft?.printerName || ''}
             onChange={e => { update('printerName', e.target.value); clearError('printerName') }}
             disabled={!isEditing}
             aria-invalid={Boolean(errors.printerName)}
@@ -391,7 +398,7 @@ export default function SettingsPage() {
             } disabled:bg-slate-50 disabled:text-slate-500`}
           >
             <option value="">Select printer…</option>
-            {printerMissing && (
+            {printerMissing && draft && (
               <option value={draft.printerName}>{draft.printerName} (saved · currently offline)</option>
             )}
             {printers.map(name => <option key={name} value={name}>{name}</option>)}
