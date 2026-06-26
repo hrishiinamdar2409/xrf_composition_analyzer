@@ -38,7 +38,7 @@ export default function CompositionPanel({
     setElementValues(prev => rebalanceCu(newPrim, prev))
   }
 
-  // Dynamic Swap Logic: Exclude the primary element from the grid
+  // Filter out the primary element from ALL_ELEMENT_GROUPS
   const primaryElementName = ELEMENT_NAMES[primKey] || primKey
   const filteredElementGroups = ALL_ELEMENT_GROUPS.map(group =>
     group.filter(name => {
@@ -49,18 +49,24 @@ export default function CompositionPanel({
     })
   ).filter(group => group.length > 0)
 
-  const formatValue = (val) => {
+  // Granular decimal formatters
+  const formatTo3Decimals = (val) => {
     if (val === undefined || val === null || isNaN(val)) return '0.000'
     return Number(val).toFixed(3)
+  }
+
+  const formatTo2Decimals = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return '0.00'
+    return Number(val).toFixed(2)
   }
 
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4">
       <p className="text-sm font-semibold text-slate-700 mb-3">COMPOSITION CONTROL PANEL</p>
 
-      {/* Control Row */}
+      {/* 3 VALUE BOXES + BUTTONS in one row */}
       <div className="flex items-center gap-3">
-        {/* Dynamic Primary Element Box */}
+        {/* Primary element box */}
         <div className="flex flex-col items-center gap-0.5 shrink-0">
           <span className={`text-[10px] font-bold uppercase tracking-widest ${
             primKey === 'Au' ? 'text-amber-700' : primKey === 'Ag' ? 'text-slate-400' : 'text-[#1a73ca]'
@@ -69,10 +75,10 @@ export default function CompositionPanel({
           </span>
           <input
             type="number"
-            step="0.001"
+            step="0.01"
             min="0"
             max="100"
-            value={localPrimaryDraft ?? formatValue(displayPrim)}
+            value={localPrimaryDraft ?? formatTo2Decimals(displayPrim)}
             onChange={e => {
               const raw = e.target.value
               setLocalPrimaryDraft(raw)
@@ -100,18 +106,18 @@ export default function CompositionPanel({
           </span>
         </div>
 
-        {/* Karat (X1) Box */}
+        {/* Karat Box */}
         <div className="flex flex-col items-center gap-0.5 shrink-0">
           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Karat</span>
           <div className="w-24 h-10 rounded-lg bg-slate-50 border-2 border-slate-300 flex items-center justify-center select-none pointer-events-none">
             <span className="text-lg font-semibold text-slate-700 tabular-nums">
-              {formatValue(elementValues['x1'] ?? 0)}
+              {formatTo2Decimals(elementValues['x1'] ?? 0)}
             </span>
           </div>
           <span className="text-[9px] text-slate-500 font-semibold">Karat (X1)</span>
         </div>
 
-        {/* Total Sum Box */}
+        {/* Total Sum box */}
         <div className="flex flex-col items-center gap-0.5 shrink-0">
           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Sum Total</span>
           <div className={`w-24 h-10 rounded-lg border-2 flex items-center justify-center select-none pointer-events-none ${
@@ -119,16 +125,16 @@ export default function CompositionPanel({
           }`}>
             <span className={`text-lg font-semibold tabular-nums ${
               Math.abs(elementSum - 100) < 0.01 ? 'text-green-700' : 'text-amber-700'
-            }`}>{formatValue(elementSum)}</span>
+            }`}>{formatTo2Decimals(elementSum)}</span>
           </div>
           <span className={`text-[9px] font-semibold ${
             Math.abs(elementSum - 100) < 0.01 ? 'text-green-700' : 'text-amber-700'
           }`}>
-            {Math.abs(elementSum - 100) < 0.01 ? '✓ 100%' : `${(elementSum - 100) > 0 ? '+' : ''}${formatValue(elementSum - 100)} off`}
+            {Math.abs(elementSum - 100) < 0.01 ? '✓ 100%' : `${(elementSum - 100) > 0 ? '+' : ''}${formatTo2Decimals(elementSum - 100)} off`}
           </span>
         </div>
 
-        {/* Delta Deviation Box */}
+        {/* Delta Summary box */}
         <div className="flex flex-col items-center gap-0.5 shrink-0">
           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Δ {primKey}</span>
           <div className={`w-24 h-10 rounded-lg border-2 flex items-center justify-center select-none pointer-events-none ${
@@ -140,7 +146,9 @@ export default function CompositionPanel({
               primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'high' ? 'text-red-700' :
               primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'mid' ? 'text-amber-700' :
               'text-slate-700'
-            }`}>{primaryDeltaRow ? formatSigned(primaryDeltaRow.delta) : '0.000'}</span>
+            }`}>
+              {primaryDeltaRow ? Number(primaryDeltaRow.delta).toFixed(2) : '0.00'}
+            </span>
           </div>
           <span className={`text-[9px] font-semibold ${
             primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'high' ? 'text-red-700' :
@@ -149,7 +157,7 @@ export default function CompositionPanel({
           }`}>Deviation</span>
         </div>
 
-        {/* Action Controls */}
+        {/* +/- buttons */}
         <div className="flex flex-col gap-2 flex-1">
           <div className="flex gap-1.5">
             {INCREMENT_STEPS.map(step => (
@@ -157,7 +165,7 @@ export default function CompositionPanel({
                 key={step.label}
                 onClick={() => applyStep(step)}
                 title={`+${step.delta}%`}
-                className="flex-1 h-8 rounded-md text-xs font-semibold border border-slate-400 bg-white text-slate-900 hover:bg-slate-100 transition-all active:scale-95 shadow-sm"
+                className="flex-1 h-8 rounded-md text-xs font-semibold border border-slate-400 bg-white text-slate-900 hover:bg-slate-100"
               >
                 {step.label}
               </button>
@@ -169,7 +177,7 @@ export default function CompositionPanel({
                 key={step.label}
                 onClick={() => applyStep(step)}
                 title={`${step.delta}%`}
-                className="flex-1 h-8 rounded-md text-xs font-semibold border border-slate-400 bg-white text-slate-900 hover:bg-slate-100 transition-all active:scale-95 shadow-sm"
+                className="flex-1 h-8 rounded-md text-xs font-semibold border border-slate-400 bg-white text-slate-900 hover:bg-slate-100"
               >
                 {step.label}
               </button>
@@ -203,7 +211,7 @@ export default function CompositionPanel({
                         type="number"
                         step="0.001"
                         readOnly={locked}
-                        value={elementDrafts[sym] ?? formatValue(val)}
+                        value={elementDrafts[sym] ?? formatTo3Decimals(val)}
                         onChange={e => {
                           if (locked) return
                           const raw = e.target.value

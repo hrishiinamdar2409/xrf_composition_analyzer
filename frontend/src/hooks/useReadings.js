@@ -59,7 +59,8 @@ export function useReadings() {
     (
       displayPrim +
       Object.entries(elementValues)
-        .filter(([k]) => k !== primKey)
+        // 💡 FIX: Exclude x1 and mq from the displayed Sum Total
+        .filter(([k]) => k !== primKey && k !== "x1" && k !== "mq")
         .reduce((s, [, v]) => s + (v || 0), 0)
     ).toFixed(3),
   );
@@ -90,7 +91,7 @@ export function useReadings() {
     [primKey],
   );
 
-  
+
   const clearDrafts = useCallback(() => {
     setPrimaryDraft(null);
     setElementDrafts({});

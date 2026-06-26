@@ -1,4 +1,13 @@
-export const POWDER_ELEMENTS = new Set(['Ir', 'Os', 'Ru', 'Re', 'W'])
+// 💡 UPDATE: Add "Sb" to the POWDER_ELEMENTS set
+export const POWDER_ELEMENTS = new Set([
+  "Ir", 
+  "Ru", 
+  "Rh", 
+  "Os", 
+  "Re",
+  "W",
+  "Sb" // Added Antimony
+]);
 export const NON_EDITABLE_ELEMENTS = new Set(['Cu'])
 export const PRIMARY_ELEMENT = { Gold: 'Au', Silver: 'Ag', Platinum: 'Pt' }
 export const ELEMENT_SYMBOL_RX = /^[A-Z][a-z]?$/
@@ -67,7 +76,12 @@ export const READING_COLUMNS = [
 
 // Element groups grid array - ADDED 'Karat' to the end of the last column group
 export const ALL_ELEMENT_GROUPS = [
-  ['Gold', 'Silver', 'Copper', 'Zinc', 'Cadmium', 'Nickel', 'Indium'],
-  ['Iron', 'Tin', 'Iridium', 'Ruthenium', 'Osmium', 'Rhenium', 'Cobalt'],
-  ['Lead', 'Gallium', 'Platinum', 'Palladium', 'Rhodium', 'Bismuth', 'Tungsten']
+  // Column 1: Core Alloys (7 Elements)
+  ["Silver", "Copper", "Zinc", "Nickel", "Cadmium", "Indium", "Iron"],
+
+  // Column 2: ALL POWDERED / SCAM ADULTERANTS (7 Elements)
+  ["Iridium", "Ruthenium", "Osmium", "Rhenium", "Rhodium", "Antimony", "Tungsten"], // 💡 MOVE: Tungsten is now safely grouped here!
+
+  // Column 3: Remaining Base & Precious Elements (7 Elements)
+  ["Cobalt", "Gallium", "Tin", "Lead", "Bismuth", "Platinum", "Palladium"] // Cobalt moved here to maintain 7 items
 ];
