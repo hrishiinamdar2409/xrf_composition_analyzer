@@ -43,27 +43,60 @@ function validateSamplePayload(payload, { requireReadingIds = true } = {}) {
     itemDesc: typeof payload.itemDesc === 'string' ? payload.itemDesc.trim() : '',
     readingIds: Array.isArray(payload.readingIds) ? payload.readingIds : null,
     testDate: payload.testDate,
+    testTime: payload.testTime,
   };
 
-  const parts = cleaned.itemDesc.split('|').map(p => p.trim()).filter(Boolean);
-  const mobileFromItemDesc = (parts[parts.length - 1] || '').replace(/\D/g, '');
+  // Log the payload for debugging
+  console.log('[validateSamplePayload] Received payload:', {
+    customerName: cleaned.customerName,
+    itemDesc: cleaned.itemDesc,
+    readingIdsLength: cleaned.readingIds?.length || 0,
+    testDate: cleaned.testDate,
+    testTime: cleaned.testTime,
+  });
 
+  // Parse itemDesc for additional validation
+  const parts = cleaned.itemDesc.split('|').map(p => p.trim()).filter(Boolean);
+  
+  // Extract mobile - only if there's a part with digits
+  let mobileFromItemDesc = '';
+  for (const part of parts) {
+    if (/^Sr:/i.test(part) || /^Wt:/i.test(part)) continue;
+    const digits = part.replace(/\D/g, '');
+    if (digits.length >= 7 && digits.length <= 15) {
+      mobileFromItemDesc = digits;
+      break;
+    }
+  }
+
+  // Customer Name Validation
   if (!cleaned.customerName || cleaned.customerName.length < 2 || cleaned.customerName.length > 120) {
     errors.push({ field: 'customerName', message: 'Customer name must be 2-120 characters.' });
   }
 
-  if (!cleaned.itemDesc || cleaned.itemDesc.length < 5 || cleaned.itemDesc.length > 300) {
-    errors.push({ field: 'itemDesc', message: 'Item description is required and must be under 300 characters.' });
+  // Item Description Validation
+  if (!cleaned.itemDesc || cleaned.itemDesc.length < 3 || cleaned.itemDesc.length > 300) {
+    console.log('[validateSamplePayload] Invalid itemDesc:', {
+      itemDesc: cleaned.itemDesc,
+      length: cleaned.itemDesc?.length || 0,
+    });
+    errors.push({ 
+      field: 'itemDesc', 
+      message: 'Item description is required and must be under 300 characters. Please ensure Sample Category and Sample Type are set.' 
+    });
   }
 
+  // Mobile validation - only if a mobile number was actually found
   if (mobileFromItemDesc && !/^\d{10}$/.test(mobileFromItemDesc)) {
     errors.push({ field: 'mobile', message: 'Mobile number must be exactly 10 digits.' });
   }
 
+  // Test Date validation
   if (cleaned.testDate != null && cleaned.testDate !== '' && !isValidIsoDate(cleaned.testDate)) {
     errors.push({ field: 'testDate', message: 'Test date must be a valid YYYY-MM-DD date.' });
   }
 
+  // Reading IDs validation
   if (requireReadingIds || cleaned.readingIds !== null) {
     if (!Array.isArray(cleaned.readingIds) || cleaned.readingIds.length === 0) {
       errors.push({ field: 'readingIds', message: 'At least one reading must be selected.' });
@@ -512,11 +545,22 @@ router.get('/:id', (req, res) => {
 
 // POST /api/samples — create new sample and link readings
 router.post('/', (req, res) => {
+  console.log('[POST /api/samples] Full request body:', JSON.stringify(req.body, null, 2));
+  
   const { errors, cleaned } = validateSamplePayload(req.body, { requireReadingIds: true });
-  if (errors.length) return buildValidationError(res, errors, 'Invalid sample payload');
+  if (errors.length) {
+    console.log('[POST /api/samples] Validation errors:', errors);
+    return buildValidationError(res, errors, 'Invalid sample payload');
+  }
 
-  const { customerName, itemDesc, readingIds, testDate } = cleaned;
-  console.log('[POST /api/samples] Received:', { customerName, readingIdsCount: readingIds?.length, testDate });
+  const { customerName, itemDesc, readingIds, testDate, testTime } = cleaned;
+  console.log('[POST /api/samples] Received:', { 
+    customerName, 
+    itemDesc, 
+    readingIdsCount: readingIds?.length, 
+    testDate,
+    testTime 
+  });
 
   const db = getDb();
   if (!ensureReadingIdsExist(db, readingIds)) {
@@ -543,14 +587,20 @@ router.post('/', (req, res) => {
       
       console.log('[POST /api/samples] Generated Sr.No:', srNo, 'itemDesc:', finalItemDesc);
 
+      // Combine date and time if both are provided
+      let testDateTime = testDate || null;
+      if (testDate && testTime) {
+        testDateTime = `${testDate}T${testTime}`;
+      }
+
       const info = db.prepare(`
         INSERT INTO samples (job_ref, customer_name, item_desc, test_date, created_at, updated_at, status)
-        VALUES (@jobRef, @customerName, @itemDesc, @testDate, @now, @now, 'pending_review')
+        VALUES (@jobRef, @customerName, @itemDesc, @testDateTime, @now, @now, 'pending_review')
       `).run({ 
         jobRef, 
         customerName: customerName || null, 
         itemDesc: finalItemDesc, 
-        testDate: testDate || null, 
+        testDateTime: testDateTime || null, 
         now 
       });
 
@@ -598,8 +648,14 @@ router.patch('/:id', (req, res) => {
   const { errors, cleaned } = validateSamplePayload(req.body, { requireReadingIds: false });
   if (errors.length) return buildValidationError(res, errors, 'Invalid sample payload');
 
-  const { customerName, itemDesc, readingIds, testDate } = cleaned;
-  console.log('[PATCH /api/samples/:id] Updating sample:', req.params.id, { customerName, itemDesc, readingIdsCount: readingIds?.length, testDate });
+  const { customerName, itemDesc, readingIds, testDate, testTime } = cleaned;
+  console.log('[PATCH /api/samples/:id] Updating sample:', req.params.id, { 
+    customerName, 
+    itemDesc, 
+    readingIdsCount: readingIds?.length, 
+    testDate,
+    testTime 
+  });
   
   const db = getDb();
   if (Array.isArray(readingIds) && readingIds.length > 0 && !ensureReadingIdsExist(db, readingIds)) {
@@ -618,12 +674,18 @@ router.patch('/:id', (req, res) => {
 
   const now = new Date().toISOString();
 
+  // Combine date and time if both are provided
+  let testDateTime = testDate || null;
+  if (testDate && testTime) {
+    testDateTime = `${testDate}T${testTime}`;
+  }
+
   try {
     db.transaction(() => {
       // Update customer_name and item_desc
       db.prepare(`
         UPDATE samples SET customer_name = ?, item_desc = ?, test_date = ?, updated_at = ? WHERE id = ?
-      `).run(customerName || null, itemDesc || null, testDate || null, now, sampleId);
+      `).run(customerName || null, itemDesc || null, testDateTime || null, now, sampleId);
 
       // Update linked readings if provided
       if (Array.isArray(readingIds)) {

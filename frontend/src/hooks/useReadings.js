@@ -68,6 +68,14 @@ export function useReadings() {
   const canPrint =
     !printing && !saving && hasComposition && selectedReadingIds.size > 0;
 
+  // Helper function to format weight with 3 decimal places
+  const formatWeight = useCallback((value) => {
+    if (value === null || value === undefined || value === '') return '';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '';
+    return num.toFixed(3);
+  }, []);
+
   const rebalanceCu = useCallback(
     (newPrim, elValues) => {
       const sumOthers = Object.entries(elValues)
@@ -206,9 +214,9 @@ export function useReadings() {
         setSampleType(firstReading.sample_type);
       }
 
-      // Auto-populate Weight (handle zero values safely)
+      // Auto-populate Weight (handle zero values safely and format with 3 decimals)
       if (firstReading.weight != null) {
-        setWeight(String(firstReading.weight));
+        setWeight(formatWeight(firstReading.weight));
       }
 
       // --- Get max date and time from all selected readings ---
@@ -265,9 +273,15 @@ export function useReadings() {
           });
         }
         READING_COLUMNS.forEach((sym) => {
-          if (r[sym] !== undefined && elMap[sym] === undefined) {
+          // SUPPORT BACKEND SQL ALIAS: "x1 AS karat"
+          let targetValue = r[sym];
+          if (sym.toLowerCase() === 'x1' && r.karat !== undefined) {
+            targetValue = r.karat;
+          }
+
+          if (targetValue !== undefined && elMap[sym] === undefined) {
             if (ELEMENT_NAMES[sym]) {
-              elMap[sym] = r[sym];
+              elMap[sym] = targetValue;
             }
           }
         });
@@ -298,6 +312,7 @@ export function useReadings() {
       rebalanceCu,
       filterValidElements,
       getMaxDateTimeFromReadings,
+      formatWeight,
     ],
   );
 
@@ -369,7 +384,7 @@ export function useReadings() {
     setTime(now.toTimeString().slice(0, 8));
     setWeight("");
     setSampleCat("Gold");
-    setSampleType("Silver Sample");
+    setSampleType("Gold Sample");
     setElementValues({});
     setMachineBaseline({});
     setPrimaryValue(null);
@@ -595,8 +610,6 @@ export function useReadings() {
 
       setEditingSampleId(targetSampleId);
 
-      // After successful save, trigger a refresh of the reports queue
-      // This will notify the Reports page to refresh
       window.dispatchEvent(
         new CustomEvent("sampleSaved", {
           detail: { sampleId: targetSampleId, srNo: data.srNo },
@@ -751,7 +764,7 @@ export function useReadings() {
           setSampleCat(parsed.sampleCat);
         }
         if (parsed.sampleType) setSampleType(parsed.sampleType);
-        if (parsed.weight != null) setWeight(String(parsed.weight));
+        if (parsed.weight != null) setWeight(formatWeight(parsed.weight));
         if (parsed.mobile) setMobile(parsed.mobile);
 
         if (
@@ -775,7 +788,7 @@ export function useReadings() {
           }
           if (parts[1]) {
             const wtMatch = parts[1].match(/Wt:([0-9.]+)g/);
-            if (wtMatch) setWeight(wtMatch[1]);
+            if (wtMatch) setWeight(formatWeight(wtMatch[1]));
           }
           if (parts[3] && !parsed.mobile) {
             const mobileStr = parts[3].trim();
@@ -827,7 +840,7 @@ export function useReadings() {
         console.error("Failed to load editing sample:", e);
       }
     }
-  }, []);
+  }, [formatWeight]);
 
   // Initial data fetch
   useEffect(() => {

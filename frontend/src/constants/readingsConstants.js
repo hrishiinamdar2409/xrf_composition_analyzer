@@ -1,5 +1,3 @@
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 export const POWDER_ELEMENTS = new Set(['Ir', 'Os', 'Ru', 'Re', 'W'])
 export const NON_EDITABLE_ELEMENTS = new Set(['Cu'])
 export const PRIMARY_ELEMENT = { Gold: 'Au', Silver: 'Ag', Platinum: 'Pt' }
@@ -32,7 +30,7 @@ export const ENTRY_MODE = {
   MULTI: 'multi',
 }
 
-// Full friendly names for every element the machine can return
+// Full friendly names for every element the machine can return - ADDED x1
 export const ELEMENT_NAMES = {
   Au: 'Gold', Ag: 'Silver', Cu: 'Copper', Zn: 'Zinc',
   Cd: 'Cadmium', Ni: 'Nickel', Bi: 'Bismuth', As: 'Arsenic',
@@ -42,6 +40,7 @@ export const ELEMENT_NAMES = {
   Cr: 'Chromium', Mn: 'Manganese', Ti: 'Titanium', In: 'Indium',
   Sb: 'Antimony', Te: 'Tellurium', Se: 'Selenium', Mo: 'Molybdenum',
   Nb: 'Niobium', Hf: 'Hafnium', Ta: 'Tantalum', V: 'Vanadium',
+  x1: 'Karat',
 }
 
 // Fixed ordered columns for the readings table - Updated to include mq and x1
@@ -52,8 +51,9 @@ export const READING_COLUMNS = [
   'mq', 'x1'
 ]
 
+// Element groups grid array - ADDED 'Karat' to the end of the last column group
 export const ALL_ELEMENT_GROUPS = [
   ['Silver', 'Copper', 'Zinc', 'Cadmium', 'Nickel', 'Indium'],
   ['Iron', 'Tin', 'Iridium', 'Ruthenium', 'Osmium', 'Rhenium'],
-  ['Cobalt', 'Lead', 'Chromium', 'Platinum', 'Palladium', 'Rhodium'],
+  ['Cobalt', 'Lead', 'Chromium', 'Platinum', 'Palladium', 'Rhodium', 'Karat'],
 ]

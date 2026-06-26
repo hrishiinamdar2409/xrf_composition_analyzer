@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import Field from './Field'
 
 const INPUT = 'w-full border border-slate-600 rounded-lg px-2.5 py-1.5 text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:bg-white bg-slate-700 text-slate-100 placeholder-slate-400'
@@ -40,6 +40,9 @@ export default function SampleDetails({
   setPrimaryValue,
 }) {
 
+  // Track if category change is from manual user interaction
+  const isManualCategoryChange = useRef(false)
+
   // Log when customerName changes for debugging
   useEffect(() => {
     console.log('SampleDetails - customerName updated:', customerName)
@@ -49,6 +52,12 @@ export default function SampleDetails({
   // Automatically updates Sample Category whenever sampleType shifts. 
   // If sampleType is cleared/unselected, it explicitly forces it to "Gold".
   useEffect(() => {
+    // Skip auto-detection if user manually changed category
+    if (isManualCategoryChange.current) {
+      isManualCategoryChange.current = false
+      return
+    }
+
     const detectedCat = detectCategoryFromType(sampleType)
     if (detectedCat !== sampleCat) {
       clearDrafts()
@@ -66,6 +75,8 @@ export default function SampleDetails({
 
   // Handle manual adjustments to category radios
   const handleCategoryChange = (cat) => {
+    // Set flag to prevent auto-detection from overriding manual selection
+    isManualCategoryChange.current = true
     clearDrafts()
     setSampleCat(cat)
     setPrimaryValue(null)
@@ -74,15 +85,6 @@ export default function SampleDetails({
 
   // Ensure uppercase conformity so the select tag value matches option keys perfectly
   const normalizedSampleType = sampleType ? sampleType.toUpperCase().trim() : ''
-
-  // Format weight to display exactly 3 decimal numbers without breaking raw inputs
-  let displayWeightValue = ''
-  if (weight !== null && weight !== undefined && weight !== '') {
-    const parsedNum = parseFloat(weight)
-    displayWeightValue = !isNaN(parsedNum) && !String(weight).endsWith('.')
-      ? parsedNum.toFixed(3)
-      : weight
-  }
 
   // Combine date and time into datetime-local string
   const getDateTimeValue = () => {
@@ -106,6 +108,27 @@ export default function SampleDetails({
     clearFieldError('date')
     clearFieldError('time')
     clearFieldError('general')
+  }
+
+  // Handle weight change - allow typing numbers and decimal
+  const handleWeightChange = (e) => {
+    const value = e.target.value
+    // Allow empty string or valid number pattern
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setWeight(value)
+      clearFieldError('weight')
+      clearFieldError('general')
+    }
+  }
+
+  // Format weight to 3 decimal places when input loses focus
+  const handleWeightBlur = () => {
+    if (weight && weight !== '') {
+      const num = parseFloat(weight)
+      if (!isNaN(num)) {
+        setWeight(num.toFixed(3))
+      }
+    }
   }
 
   return (
@@ -186,19 +209,14 @@ export default function SampleDetails({
           {formErrors.sampleType && <span className="text-xs text-red-400 mt-1 block">{formErrors.sampleType}</span>}
         </Field>
 
-        {/* Field 5: Weight Management Node */}
+        {/* Field 5: Weight Management Node - Fixed with 3 decimal places */}
         <Field label="Weight (gm)" required>
           <input 
             className={INPUT} 
-            type="number" 
-            step="0.001" 
-            min="0" 
-            value={displayWeightValue}
-            onChange={e => { 
-              setWeight(e.target.value)
-              clearFieldError('weight')
-              clearFieldError('general')
-            }} 
+            type="text" 
+            value={weight || ''}
+            onChange={handleWeightChange}
+            onBlur={handleWeightBlur}
             placeholder="0.000" 
           />
           {formErrors.weight && <span className="text-xs text-red-400 mt-1 block">{formErrors.weight}</span>}

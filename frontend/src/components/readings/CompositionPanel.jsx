@@ -50,12 +50,24 @@ export default function CompositionPanel({
     setElementValues(prev => rebalanceCu(newPrim, prev))
   }
 
-  const elementGroupsForDisplay = ALL_ELEMENT_GROUPS.map(group =>
-    group.map(name => {
-      if (name === ELEMENT_NAMES[primKey]) return ELEMENT_NAMES[primKey]
-      return name
+  // Filter out the primary element from ALL_ELEMENT_GROUPS
+  const primaryElementName = ELEMENT_NAMES[primKey] || primKey
+  
+  // Filter element groups to exclude the primary element
+  const filteredElementGroups = ALL_ELEMENT_GROUPS.map(group =>
+    group.filter(name => {
+      if (name === primaryElementName) return false
+      const sym = nameToSym[name] || name
+      if (sym === primKey) return false
+      return true
     })
-  )
+  ).filter(group => group.length > 0)
+
+  // Helper function to format value with 3 decimal places
+  const formatValue = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return '0.000'
+    return Number(val).toFixed(3)
+  }
 
   return (
     <div className="bg-slate-800 rounded-xl border border-slate-700 shadow p-4">
@@ -66,11 +78,11 @@ export default function CompositionPanel({
         {/* Primary element box */}
         <div className="flex flex-col items-center gap-0.5 shrink-0">
           <span className={`text-[10px] font-bold uppercase tracking-widest ${
-            primKey === 'Au' ? 'text-amber-700' : 'text-[#1a73ca]'
+            primKey === 'Au' ? 'text-amber-700' : primKey === 'Ag' ? 'text-slate-400' : 'text-[#1a73ca]'
           }`}>{ELEMENT_NAMES[primKey] || primKey}</span>
           <input
             type="number" step="0.001" min="0" max="100"
-            value={localPrimaryDraft ?? formatCompact(displayPrim)}
+            value={localPrimaryDraft ?? formatValue(displayPrim)}
             onChange={e => {
               const raw = e.target.value
               setLocalPrimaryDraft(raw)
@@ -88,11 +100,13 @@ export default function CompositionPanel({
             className={`w-24 h-10 rounded-lg border-2 text-center text-lg font-semibold tabular-nums focus:outline-none focus:ring-2 ${
               primKey === 'Au'
                 ? 'bg-amber-50 border-amber-500 text-amber-700 focus:ring-amber-400'
+                : primKey === 'Ag'
+                ? 'bg-slate-100 border-slate-400 text-slate-700 focus:ring-slate-400'
                 : 'bg-[#1a73ca] border-[#1a73ca] text-white focus:ring-[#1a73ca]'
             }`}
           />
           <span className={`text-[9px] font-semibold ${
-            primKey === 'Au' ? 'text-amber-600' : 'text-[#1a73ca]'
+            primKey === 'Au' ? 'text-amber-600' : primKey === 'Ag' ? 'text-slate-500' : 'text-[#1a73ca]'
           }`}>{primKey} · % Pure</span>
         </div>
 
@@ -100,7 +114,7 @@ export default function CompositionPanel({
         <div className="flex flex-col items-center gap-0.5 shrink-0">
           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Impurity</span>
           <div className="w-24 h-10 rounded-lg bg-slate-50 border-2 border-slate-300 flex items-center justify-center select-none pointer-events-none">
-            <span className="text-lg font-semibold text-slate-700 tabular-nums">{formatCompact(impurity)}</span>
+            <span className="text-lg font-semibold text-slate-700 tabular-nums">{formatValue(impurity)}</span>
           </div>
           <span className="text-[9px] text-slate-500 font-semibold">100 - {primKey}</span>
         </div>
@@ -115,12 +129,12 @@ export default function CompositionPanel({
           }`}>
             <span className={`text-lg font-semibold tabular-nums ${
               Math.abs(elementSum - 100) < 0.01 ? 'text-green-700' : 'text-amber-700'
-            }`}>{formatCompact(elementSum)}</span>
+            }`}>{formatValue(elementSum)}</span>
           </div>
           <span className={`text-[9px] font-semibold ${
             Math.abs(elementSum - 100) < 0.01 ? 'text-green-700' : 'text-amber-700'
           }`}>
-            {Math.abs(elementSum - 100) < 0.01 ? '✓ 100%' : `${(elementSum-100)>0?'+':''}${formatCompact(elementSum-100)} off`}
+            {Math.abs(elementSum - 100) < 0.01 ? '✓ 100%' : `${(elementSum-100)>0?'+':''}${formatValue(elementSum-100)} off`}
           </span>
         </div>
 
@@ -140,9 +154,7 @@ export default function CompositionPanel({
                 : primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'mid'
                   ? 'text-amber-700'
                   : 'text-slate-700'
-            }`}>
-              {primaryDeltaRow ? formatSigned(primaryDeltaRow.delta) : '0.000'}
-            </span>
+            }`}>{primaryDeltaRow ? formatSigned(primaryDeltaRow.delta) : '0.000'}</span>
           </div>
           <span className={`text-[9px] font-semibold ${
             primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'high'
@@ -150,9 +162,7 @@ export default function CompositionPanel({
               : primaryDeltaRow && deltaTone(primaryDeltaRow.delta) === 'mid'
                 ? 'text-amber-700'
                 : 'text-slate-500'
-          }`}>
-            Deviation
-          </span>
+          }`}>Deviation</span>
         </div>
 
         {/* +/- buttons */}
@@ -186,53 +196,57 @@ export default function CompositionPanel({
         </div>
       </div>
 
-      {/* ALL ELEMENTS — 3 columns */}
+      {/* ALL ELEMENTS Grid */}
       <div className="mt-3 border-t border-slate-700 pt-3">
         <p className="text-sm font-semibold text-slate-700 mb-2">ALL ELEMENTS</p>
-        <div className="grid grid-cols-3 gap-x-4 gap-y-1">
-          {elementGroupsForDisplay.map((group, gi) => (
-            <div key={gi} className="flex flex-col gap-1">
-              {group.map(fullName => {
-                const sym = nameToSym[fullName] || fullName
-                const val = elementValues[sym] ?? 0
-                const locked = NON_EDITABLE_ELEMENTS.has(sym) || sym === primKey
-                const isPowder = POWDER_ELEMENTS.has(sym)
-                const isRed = val < 0 || (isPowder && val > 0)
-                
-                return (
-                  <div key={sym} className="flex items-center gap-1.5">
-                    <span className="text-xs font-semibold w-28 shrink-0 text-slate-700">
-                      {fullName} ({sym.toUpperCase()})
-                    </span>
-                    <input
-                      type="number" step="0.001" readOnly={locked}
-                      value={elementDrafts[sym] ?? formatCompact(val)}
-                      onChange={e => {
-                        if (locked) return
-                        const raw = e.target.value
-                        setElementDrafts(prev => ({ ...prev, [sym]: raw }))
-                        handleElementChange(sym, raw)
-                      }}
-                      onBlur={() => {
-                        setElementDrafts(prev => {
-                          const next = { ...prev }
-                          delete next[sym]
-                          return next
-                        })
-                      }}
-                      className={`flex-1 min-w-0 text-center border rounded-md px-1 py-1 text-sm font-medium tabular-nums
-                        focus:outline-none focus:ring-1 focus:ring-amber-500 transition-colors
-                        ${ isRed
-                            ? 'border-red-700 bg-red-900/30 text-red-400'
-                            : 'border-slate-600 bg-slate-700 text-slate-200 hover:border-amber-500'
-                        }`}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          ))}
-        </div>
+        {filteredElementGroups.every(group => group.length === 0) ? (
+          <p className="text-xs text-slate-500 italic">No other elements available</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-x-4 gap-y-1">
+            {filteredElementGroups.map((group, gi) => (
+              <div key={gi} className="flex flex-col gap-1">
+                {group.map(fullName => {
+                  const sym = nameToSym[fullName] || fullName
+                  const val = elementValues[sym] ?? 0
+                  const locked = NON_EDITABLE_ELEMENTS.has(sym) || sym === primKey
+                  const isPowder = POWDER_ELEMENTS.has(sym)
+                  const isRed = val < 0 || (isPowder && val > 0)
+                  
+                  return (
+                    <div key={sym} className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold w-28 shrink-0 text-slate-700">
+                        {fullName} ({sym.toUpperCase()})
+                      </span>
+                      <input
+                        type="number" step="0.001" readOnly={locked}
+                        value={elementDrafts[sym] ?? formatValue(val)}
+                        onChange={e => {
+                          if (locked) return
+                          const raw = e.target.value
+                          setElementDrafts(prev => ({ ...prev, [sym]: raw }))
+                          handleElementChange(sym, raw)
+                        }}
+                        onBlur={() => {
+                          setElementDrafts(prev => {
+                            const next = { ...prev }
+                            delete next[sym]
+                            return next
+                          })
+                        }}
+                        className={`flex-1 min-w-0 text-center border rounded-md px-1 py-1 text-sm font-medium tabular-nums
+                          focus:outline-none focus:ring-1 focus:ring-amber-500 transition-colors
+                          ${ isRed
+                              ? 'border-red-700 bg-red-900/30 text-red-400'
+                              : 'border-slate-600 bg-slate-700 text-slate-200 hover:border-amber-500'
+                          }`}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
