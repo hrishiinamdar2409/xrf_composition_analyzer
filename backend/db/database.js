@@ -1,5 +1,5 @@
 /**
- * SQLite database setup and schema - Flattened Element Architecture Upgrade
+ * SQLite database setup and schema – Simplified & Consistent
  * Single file: goldscope-data.db
  */
 
@@ -23,10 +23,8 @@ function getDb() {
 }
 
 function initialise(db) {
-  // 1. Core Flattened Schema Setup (Logically Sequenced with 3-Way Composite Constraint)
   db.exec(`
     CREATE TABLE IF NOT EXISTS readings (
-      -- 1. Identifiers & File System Trackers
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       arrived_at    TEXT    NOT NULL,
       file_path     TEXT    NOT NULL,
@@ -34,15 +32,13 @@ function initialise(db) {
       entry_index   INTEGER NOT NULL,
       profile       TEXT,
 
-      -- 2. Context Metadata & Physical Specs
       serial_number TEXT,
       reading_date  TEXT,
       reading_time  TEXT,
       customer_name TEXT,
       sample_type   TEXT,
       weight        REAL,
-      
-      -- 3. Flattened Material Element Name Columns (Safely Quoted)
+
       "Au" REAL DEFAULT 0.0, "Ag" REAL DEFAULT 0.0, "Cu" REAL DEFAULT 0.0,
       "Zn" REAL DEFAULT 0.0, "Ni" REAL DEFAULT 0.0, "Cd" REAL DEFAULT 0.0,
       "In" REAL DEFAULT 0.0, "Ir" REAL DEFAULT 0.0, "Ru" REAL DEFAULT 0.0,
@@ -52,26 +48,20 @@ function initialise(db) {
       "Pb" REAL DEFAULT 0.0, "Bi" REAL DEFAULT 0.0, "W"  REAL DEFAULT 0.0,
       "Sb" REAL DEFAULT 0.0, "mq" REAL DEFAULT 0.0, "x1" REAL DEFAULT 0.0,
 
-      -- 4. Backup Parse Dumps
       elements_json TEXT    NOT NULL,
       raw_json      TEXT    NOT NULL,
-      
-      -- 👑 ENHANCED DATA INTEGRITY GUARD: Multi-column composite safety check
       UNIQUE(file_path, block, entry_index)
     );
 
     CREATE TABLE IF NOT EXISTS samples (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      job_ref       TEXT    NOT NULL UNIQUE,
+      sr_no         TEXT    NOT NULL UNIQUE,
       customer_name TEXT,
       item_desc     TEXT,
       test_date     TEXT,
       created_at    TEXT    NOT NULL,
       updated_at    TEXT,
-      status        TEXT    NOT NULL DEFAULT 'pending_review',
-      approved_by   TEXT,
-      approved_at   TEXT,
-      expert_notes  TEXT
+      is_printed    INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS sample_readings (
@@ -117,12 +107,13 @@ function initialise(db) {
 
     CREATE INDEX IF NOT EXISTS idx_readings_arrived ON readings (arrived_at DESC);
     CREATE INDEX IF NOT EXISTS idx_audit_occurred ON audit_log (occurred_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_samples_sr_no ON samples(sr_no);
   `);
 
-  // 2. Comprehensive Zero-Downtime Migration Block
+  // Flattened architecture: ensure all element columns exist in readings
   const targetColumns = [
     'file_path', 'block', 'entry_index', 'profile', 'serial_number', 'reading_date', 'reading_time', 'customer_name', 'sample_type', 'weight',
-    'Au', 'Ag', 'Cu', 'Zn', 'Ni', 'Cd', 'In', 'Ir', 'Ru', 'Rh', 'Pd', 'Fe', 
+    'Au', 'Ag', 'Cu', 'Zn', 'Ni', 'Cd', 'In', 'Ir', 'Ru', 'Rh', 'Pd', 'Fe',
     'Pt', 'Os', 'Re', 'Co', 'Ga', 'Sn', 'Pb', 'Bi', 'W', 'Sb', 'mq', 'x1'
   ];
 

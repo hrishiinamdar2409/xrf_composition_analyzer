@@ -1,5 +1,6 @@
 /**
  * REST API routes — Samples (Jobs)
+ * Simplified schema: sr_no, is_printed, no status/approved_by/expert_notes
  */
 
 'use strict';
@@ -14,7 +15,7 @@ const { getDb } = require('../db/database');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-const ELEMENT_SYMBOL_RX = /^[A-Z][a-z]?$/;
+const ELEMENT_SYMBOL_RX = /^[A-Za-z][A-Za-z0-9]{0,2}$/;
 
 function toPositiveInt(value) {
   const n = Number(value);
@@ -46,7 +47,6 @@ function validateSamplePayload(payload, { requireReadingIds = true } = {}) {
     testTime: payload.testTime,
   };
 
-  // Log the payload for debugging
   console.log('[validateSamplePayload] Received payload:', {
     customerName: cleaned.customerName,
     itemDesc: cleaned.itemDesc,
@@ -55,10 +55,7 @@ function validateSamplePayload(payload, { requireReadingIds = true } = {}) {
     testTime: cleaned.testTime,
   });
 
-  // Parse itemDesc for additional validation
   const parts = cleaned.itemDesc.split('|').map(p => p.trim()).filter(Boolean);
-  
-  // Extract mobile - only if there's a part with digits
   let mobileFromItemDesc = '';
   for (const part of parts) {
     if (/^Sr:/i.test(part) || /^Wt:/i.test(part)) continue;
@@ -69,34 +66,25 @@ function validateSamplePayload(payload, { requireReadingIds = true } = {}) {
     }
   }
 
-  // Customer Name Validation
   if (!cleaned.customerName || cleaned.customerName.length < 2 || cleaned.customerName.length > 120) {
     errors.push({ field: 'customerName', message: 'Customer name must be 2-120 characters.' });
   }
 
-  // Item Description Validation
   if (!cleaned.itemDesc || cleaned.itemDesc.length < 3 || cleaned.itemDesc.length > 300) {
-    console.log('[validateSamplePayload] Invalid itemDesc:', {
-      itemDesc: cleaned.itemDesc,
-      length: cleaned.itemDesc?.length || 0,
-    });
     errors.push({ 
       field: 'itemDesc', 
-      message: 'Item description is required and must be under 300 characters. Please ensure Sample Category and Sample Type are set.' 
+      message: 'Item description is required and must be under 300 characters.' 
     });
   }
 
-  // Mobile validation - only if a mobile number was actually found
   if (mobileFromItemDesc && !/^\d{10}$/.test(mobileFromItemDesc)) {
     errors.push({ field: 'mobile', message: 'Mobile number must be exactly 10 digits.' });
   }
 
-  // Test Date validation
   if (cleaned.testDate != null && cleaned.testDate !== '' && !isValidIsoDate(cleaned.testDate)) {
     errors.push({ field: 'testDate', message: 'Test date must be a valid YYYY-MM-DD date.' });
   }
 
-  // Reading IDs validation
   if (requireReadingIds || cleaned.readingIds !== null) {
     if (!Array.isArray(cleaned.readingIds) || cleaned.readingIds.length === 0) {
       errors.push({ field: 'readingIds', message: 'At least one reading must be selected.' });
@@ -142,7 +130,6 @@ function validateExpertValuesPayload(expertValues) {
       errors.push({ field: `expertValues.${element}`, message: 'Invalid element symbol.' });
       continue;
     }
-
     const value = Number(raw);
     if (!Number.isFinite(value)) {
       errors.push({ field: `expertValues.${element}`, message: 'Value must be numeric.' });
@@ -152,35 +139,23 @@ function validateExpertValuesPayload(expertValues) {
       errors.push({ field: `expertValues.${element}`, message: 'Value must be between 0 and 100.' });
     }
   }
-
   return { errors };
 }
 
 function generateNextSrNo(db) {
   try {
-    // Get all job_ref values
-    const results = db.prepare(`SELECT job_ref FROM samples ORDER BY id DESC`).all();
-    
-    if (!results || results.length === 0) {
-      return '1';
-    }
-    
-    // Find the highest number from job_ref
+    const results = db.prepare(`SELECT sr_no FROM samples ORDER BY id DESC`).all();
+    if (!results || results.length === 0) return '1';
     let maxNum = 0;
     for (const row of results) {
-      if (!row.job_ref) continue;
-      // Try to extract number from job_ref
-      const match = row.job_ref.match(/(\d+)$/);
+      if (!row.sr_no) continue;
+      const match = row.sr_no.match(/(\d+)$/);
       if (match) {
         const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
+        if (!isNaN(num) && num > maxNum) maxNum = num;
       }
     }
-    
-    const nextNum = maxNum + 1;
-    return String(nextNum);
+    return String(maxNum + 1);
   } catch (err) {
     console.error('[generateNextSrNo] Error:', err);
     return String(Date.now()).slice(-6);
@@ -188,7 +163,6 @@ function generateNextSrNo(db) {
 }
 
 function calcAutoResults(db, sampleId) {
-  // Get all non-excluded readings for this sample
   const rows = db.prepare(`
     SELECT r.elements_json
     FROM readings r
@@ -209,9 +183,7 @@ function calcAutoResults(db, sampleId) {
         totals[el.name] = (totals[el.name] || 0) + el.value;
         counts[el.name] = (counts[el.name] || 0) + 1;
       }
-    } catch (e) {
-      // Ignore parse errors
-    }
+    } catch (e) { /* ignore */ }
   }
 
   const insert = db.prepare(`
@@ -226,19 +198,10 @@ function calcAutoResults(db, sampleId) {
 }
 
 function parseItemDesc(itemDesc) {
-  const parsed = {
-    sampleCat: null,
-    sampleType: null,
-    weight: null,
-    srNo: null,
-    mobile: null,
-  };
-
+  const parsed = { sampleCat: null, sampleType: null, weight: null, srNo: null, mobile: null };
   if (!itemDesc || typeof itemDesc !== 'string') return parsed;
 
   const parts = itemDesc.split('|').map(p => p.trim()).filter(Boolean);
-
-  // Part 1 usually looks like: "Gold Silver Sample"
   if (parts[0]) {
     const catTypeMatch = parts[0].match(/^(Gold|Silver|Platinum)\s+(.+)$/i);
     if (catTypeMatch) {
@@ -253,7 +216,6 @@ function parseItemDesc(itemDesc) {
   const srMatch = itemDesc.match(/Sr:([0-9]+)/i);
   if (srMatch) parsed.srNo = srMatch[1];
 
-  // Find a pure digits token (7-15 digits) that is not the Sr token.
   for (const part of parts) {
     if (/^Sr:/i.test(part) || /^Wt:/i.test(part)) continue;
     const digits = part.replace(/\D/g, '');
@@ -262,7 +224,6 @@ function parseItemDesc(itemDesc) {
       break;
     }
   }
-
   return parsed;
 }
 
@@ -311,10 +272,9 @@ function buildPrintJobText(sample, adjustedValues, orderedElements) {
   const primary = adjustedValues.get(primarySym) ?? null;
   const karat = primarySym === 'Au' && adjustedValues.get('Au') != null ? karatFromPurity(adjustedValues.get('Au')) : null;
 
-  // Page 1: section printed below pre-printed red header
   lines.push('Assay Report');
   lines.push('');
-  lines.push(`Name       : ${sample.customer_name || '-'}`.padEnd(45) + `Serial No : ${sample.job_ref || '-'}`);
+  lines.push(`Name       : ${sample.customer_name || '-'}`.padEnd(45) + `Serial No : ${sample.sr_no || '-'}`);
   lines.push(`Item Name  : ${parsed.sampleType || sample.item_desc || '-'}`.padEnd(45) + `Date      : ${reportDate.toLocaleDateString('en-GB')}`);
   lines.push(`Weight     : ${parsed.weight || '-'}${parsed.weight ? ' gm' : ''}`.padEnd(45) + `Time      : ${now.toLocaleTimeString('en-GB')}`);
   lines.push('');
@@ -326,7 +286,6 @@ function buildPrintJobText(sample, adjustedValues, orderedElements) {
   lines.push('----------------------------------------------------------------------');
   lines.push('');
 
-  // 3 dashboard-style sections, same element grouping as control panel
   const ELEMENT_SECTIONS = [
     ['Au', 'Ag', 'Cu', 'Zn', 'Cd', 'Ni', 'In'],
     ['Fe', 'Sn', 'Ir', 'Ru', 'Os', 'Re'],
@@ -387,7 +346,7 @@ function buildPreviewHtml(sample) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Print Preview - ${esc(sample.job_ref)}</title>
+  <title>Print Preview - ${esc(sample.sr_no)}</title>
   <style>
     body { margin: 0; background: #edf1f7; font-family: 'Segoe UI', Tahoma, sans-serif; }
     .sheet { width: 794px; min-height: 1123px; margin: 24px auto; background: #fff; box-shadow: 0 8px 26px rgba(17,24,39,0.16); padding: 72px 64px 56px; }
@@ -410,11 +369,11 @@ function buildPreviewHtml(sample) {
 <body>
   <div class="sheet">
     <div class="spacer">Pre-printed branding/header area (left empty)</div>
-    <div class="title">Gold Testing Certificate - Composition Result</div>
+    <div class="title">Assay Certificate – Composition Result</div>
     <div class="sub">Preview only (printer not connected)</div>
 
     <div class="grid">
-      <div><span class="k">Sample No:</span>${esc(sample.job_ref)}</div>
+      <div><span class="k">Sample No:</span>${esc(sample.sr_no)}</div>
       <div><span class="k">Customer:</span>${esc(sample.customer_name)}</div>
       <div><span class="k">Test Date:</span>${sample.test_date ? new Date(sample.test_date).toLocaleDateString('en-GB') : sample.created_at ? new Date(sample.created_at).toLocaleDateString('en-GB') : '—'}</div>
       <div><span class="k">Preview Date:</span>${new Date().toLocaleString('en-GB')}</div>
@@ -427,7 +386,7 @@ function buildPreviewHtml(sample) {
       <tbody>${rows || '<tr><td colspan="2">No element data</td></tr>'}</tbody>
     </table>
 
-    <div class="foot">Approved by: ${esc(sample.approved_by)} | Approved at: ${sample.approved_at ? new Date(sample.approved_at).toLocaleString('en-GB') : '—'}</div>
+    <div class="foot">Printed: ${sample.is_printed ? 'Yes' : 'No'}</div>
     <div class="line">End of certificate preview</div>
   </div>
 </body>
@@ -442,8 +401,8 @@ router.get('/', (req, res) => {
     const db = getDb();
     const samples = db.prepare(`
       SELECT s.*,
-             COUNT(sr.reading_id) as reading_count,
-             GROUP_CONCAT(sr.reading_id || ':' || sr.excluded || ':' || COALESCE(r2.nbr, '') ORDER BY sr.reading_id ASC) as reading_meta
+            COUNT(sr.reading_id) as reading_count,
+            GROUP_CONCAT(sr.reading_id || ':' || sr.excluded || ':' || COALESCE(CAST(r2.entry_index AS TEXT), '') ORDER BY sr.reading_id ASC) as reading_meta
       FROM samples s
       LEFT JOIN sample_readings sr ON sr.sample_id = s.id
       LEFT JOIN readings r2 ON r2.id = sr.reading_id
@@ -451,13 +410,8 @@ router.get('/', (req, res) => {
       ORDER BY s.id DESC
     `).all();
 
-    // Fetch all final & auto results in one query, then group by sample_id
     const allResults = db.prepare(`
-      SELECT
-        fr.sample_id,
-        fr.element,
-        fr.expert_value,
-        fr.auto_value
+      SELECT fr.sample_id, fr.element, fr.expert_value, fr.auto_value
       FROM final_results fr
       ORDER BY fr.sample_id, fr.element
     `).all();
@@ -469,7 +423,6 @@ router.get('/', (req, res) => {
     }
 
     res.json(samples.map(s => {
-      // Parse "id:excluded,id:excluded,..." into [{id, excluded, num}]
       const readings = s.reading_meta
         ? s.reading_meta.split(',').map((tok, idx) => {
             const [id, excl, nbr] = tok.split(':');
@@ -480,6 +433,7 @@ router.get('/', (req, res) => {
       const { reading_meta, ...rest } = s;
       return {
         ...rest,
+        is_printed: s.is_printed, // 0/1
         parsedItemDesc: parseItemDesc(s.item_desc),
         elementResults: resultsBySample[s.id] || [],
         readings,
@@ -491,12 +445,11 @@ router.get('/', (req, res) => {
   }
 });
 
-// GET /api/samples/next-sr — predict the next Sr.No (for UI display only)
+// GET /api/samples/next-sr
 router.get('/next-sr', (req, res) => {
   try {
     const db = getDb();
     const nextSrNo = generateNextSrNo(db);
-    console.log('[GET /api/samples/next-sr] nextSrNo:', nextSrNo);
     res.json({ nextSrNo });
   } catch (err) {
     console.error('[GET /api/samples/next-sr] Error:', err);
@@ -504,7 +457,7 @@ router.get('/next-sr', (req, res) => {
   }
 });
 
-// GET /api/samples/:id — with linked readings and auto results
+// GET /api/samples/:id
 router.get('/:id', (req, res) => {
   try {
     const db = getDb();
@@ -522,13 +475,8 @@ router.get('/:id', (req, res) => {
       elements: JSON.parse(r.elements_json || '[]'),
     }));
 
-    const autoResults = db.prepare(`
-      SELECT element, auto_value FROM auto_results WHERE sample_id = ?
-    `).all(req.params.id);
-
-    const finalResults = db.prepare(`
-      SELECT element, auto_value, expert_value FROM final_results WHERE sample_id = ?
-    `).all(req.params.id);
+    const autoResults = db.prepare(`SELECT element, auto_value FROM auto_results WHERE sample_id = ?`).all(req.params.id);
+    const finalResults = db.prepare(`SELECT element, auto_value, expert_value FROM final_results WHERE sample_id = ?`).all(req.params.id);
 
     res.json({
       ...sample,
@@ -536,6 +484,7 @@ router.get('/:id', (req, res) => {
       readings,
       autoResults,
       finalResults,
+      is_printed: sample.is_printed,
     });
   } catch (err) {
     console.error('[GET /api/samples/:id] Error:', err);
@@ -543,61 +492,43 @@ router.get('/:id', (req, res) => {
   }
 });
 
-// POST /api/samples — create new sample and link readings
+// POST /api/samples — create new sample
 router.post('/', (req, res) => {
   console.log('[POST /api/samples] Full request body:', JSON.stringify(req.body, null, 2));
   
   const { errors, cleaned } = validateSamplePayload(req.body, { requireReadingIds: true });
   if (errors.length) {
-    console.log('[POST /api/samples] Validation errors:', errors);
     return buildValidationError(res, errors, 'Invalid sample payload');
   }
 
   const { customerName, itemDesc, readingIds, testDate, testTime } = cleaned;
-  console.log('[POST /api/samples] Received:', { 
-    customerName, 
-    itemDesc, 
-    readingIdsCount: readingIds?.length, 
-    testDate,
-    testTime 
-  });
-
   const db = getDb();
   if (!ensureReadingIdsExist(db, readingIds)) {
     return buildValidationError(res, [{ field: 'readingIds', message: 'One or more selected readings do not exist.' }], 'Invalid readings selected');
   }
 
   const now = new Date().toISOString();
-  
-  // Auto-generate Sr.No
   const srNo = generateNextSrNo(db);
-  const jobRef = srNo;
 
   try {
     const createSample = db.transaction(() => {
-      // Build itemDesc with Sr.No
       let finalItemDesc = itemDesc;
-      
-      // Update/insert Sr.No in itemDesc
       if (itemDesc.includes('Sr:')) {
         finalItemDesc = itemDesc.replace(/Sr:[^\|]*/, `Sr:${srNo}`);
       } else {
         finalItemDesc = itemDesc + ` | Sr:${srNo}`;
       }
-      
-      console.log('[POST /api/samples] Generated Sr.No:', srNo, 'itemDesc:', finalItemDesc);
 
-      // Combine date and time if both are provided
       let testDateTime = testDate || null;
       if (testDate && testTime) {
         testDateTime = `${testDate}T${testTime}`;
       }
 
       const info = db.prepare(`
-        INSERT INTO samples (job_ref, customer_name, item_desc, test_date, created_at, updated_at, status)
-        VALUES (@jobRef, @customerName, @itemDesc, @testDateTime, @now, @now, 'pending_review')
+        INSERT INTO samples (sr_no, customer_name, item_desc, test_date, created_at, updated_at, is_printed)
+        VALUES (@srNo, @customerName, @itemDesc, @testDateTime, @now, @now, 0)
       `).run({ 
-        jobRef, 
+        srNo, 
         customerName: customerName || null, 
         itemDesc: finalItemDesc, 
         testDateTime: testDateTime || null, 
@@ -605,7 +536,6 @@ router.post('/', (req, res) => {
       });
 
       const sampleId = info.lastInsertRowid;
-      console.log('[POST /api/samples] Created sample:', { sampleId, jobRef, srNo });
 
       const linkReading = db.prepare(`
         INSERT OR IGNORE INTO sample_readings (sample_id, reading_id, excluded)
@@ -620,14 +550,14 @@ router.post('/', (req, res) => {
       db.prepare(`
         INSERT INTO audit_log (occurred_at, sample_id, action, detail_json)
         VALUES (?, ?, 'SAMPLE_CREATED', ?)
-      `).run(now, sampleId, JSON.stringify({ jobRef, srNo, readingCount: readingIds.length }));
+      `).run(now, sampleId, JSON.stringify({ srNo, readingCount: readingIds.length }));
 
       return sampleId;
     });
 
     const sampleId = createSample();
-    console.log('[POST /api/samples] Success, returning:', { id: sampleId, jobRef, srNo });
-    res.status(201).json({ id: sampleId, jobRef, srNo });
+    console.log('[POST /api/samples] Success, returning:', { id: sampleId, srNo });
+    res.status(201).json({ id: sampleId, srNo });
   } catch (err) {
     console.error('[POST /api/samples] Error:', err.message);
     if (err.message.includes('UNIQUE constraint failed')) {
@@ -638,7 +568,7 @@ router.post('/', (req, res) => {
   }
 });
 
-// PATCH /api/samples/:id — update customer name, item_desc, and linked readings
+// PATCH /api/samples/:id — update sample metadata and/or readings
 router.patch('/:id', (req, res) => {
   const sampleId = toPositiveInt(req.params.id);
   if (!sampleId) {
@@ -649,32 +579,18 @@ router.patch('/:id', (req, res) => {
   if (errors.length) return buildValidationError(res, errors, 'Invalid sample payload');
 
   const { customerName, itemDesc, readingIds, testDate, testTime } = cleaned;
-  console.log('[PATCH /api/samples/:id] Updating sample:', req.params.id, { 
-    customerName, 
-    itemDesc, 
-    readingIdsCount: readingIds?.length, 
-    testDate,
-    testTime 
-  });
-  
   const db = getDb();
   if (Array.isArray(readingIds) && readingIds.length > 0 && !ensureReadingIdsExist(db, readingIds)) {
     return buildValidationError(res, [{ field: 'readingIds', message: 'One or more selected readings do not exist.' }], 'Invalid readings selected');
   }
 
   const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(sampleId);
-  if (!sample) {
-    console.log('[PATCH /api/samples/:id] Sample not found:', req.params.id);
-    return res.status(404).json({ error: 'Sample not found' });
-  }
-  if (sample.status === 'report_generated') {
-    console.log('[PATCH /api/samples/:id] Sample locked:', req.params.id, sample.status);
+  if (!sample) return res.status(404).json({ error: 'Sample not found' });
+  if (sample.is_printed) {
     return res.status(409).json({ error: 'Sample is locked after print' });
   }
 
   const now = new Date().toISOString();
-
-  // Combine date and time if both are provided
   let testDateTime = testDate || null;
   if (testDate && testTime) {
     testDateTime = `${testDate}T${testTime}`;
@@ -682,17 +598,12 @@ router.patch('/:id', (req, res) => {
 
   try {
     db.transaction(() => {
-      // Update customer_name and item_desc
       db.prepare(`
         UPDATE samples SET customer_name = ?, item_desc = ?, test_date = ?, updated_at = ? WHERE id = ?
       `).run(customerName || null, itemDesc || null, testDateTime || null, now, sampleId);
 
-      // Update linked readings if provided
       if (Array.isArray(readingIds)) {
-        // Remove old links
         db.prepare(`DELETE FROM sample_readings WHERE sample_id = ?`).run(sampleId);
-        
-        // Add new links
         const linkReading = db.prepare(`
           INSERT OR IGNORE INTO sample_readings (sample_id, reading_id, excluded)
           VALUES (?, ?, 0)
@@ -700,8 +611,6 @@ router.patch('/:id', (req, res) => {
         for (const rid of readingIds) {
           linkReading.run(sampleId, rid);
         }
-        
-        // Recalculate auto results
         calcAutoResults(db, sampleId);
       }
 
@@ -710,8 +619,6 @@ router.patch('/:id', (req, res) => {
         VALUES (?, ?, 'SAMPLE_UPDATED', ?)
       `).run(now, sampleId, JSON.stringify({ customerName, readingCount: readingIds?.length || 0 }));
     })();
-    
-    console.log('[PATCH /api/samples/:id] Success:', sampleId);
     res.json({ id: sampleId, ok: true });
   } catch (err) {
     console.error('[PATCH /api/samples/:id] Error:', err.message);
@@ -719,7 +626,7 @@ router.patch('/:id', (req, res) => {
   }
 });
 
-// POST /api/samples/:id/revise — reopen a printed sample for editing/reprint
+// POST /api/samples/:id/revise — reopen a printed sample
 router.post('/:id/revise', (req, res) => {
   const sampleId = toPositiveInt(req.params.id);
   if (!sampleId) {
@@ -729,19 +636,18 @@ router.post('/:id/revise', (req, res) => {
   const db = getDb();
   const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(sampleId);
   if (!sample) return res.status(404).json({ error: 'Not found' });
-  if (sample.status !== 'report_generated') {
+  if (!sample.is_printed) {
     return res.status(409).json({ error: 'Only printed samples can be revised' });
   }
 
   const now = new Date().toISOString();
-  db.prepare(`UPDATE samples SET status = 'expert_review', updated_at = ? WHERE id = ?`)
-    .run(now, sampleId);
+  db.prepare(`UPDATE samples SET is_printed = 0, updated_at = ? WHERE id = ?`).run(now, sampleId);
   db.prepare(`
     INSERT INTO audit_log (occurred_at, sample_id, action, detail_json)
     VALUES (?, ?, 'REPORT_REVISED', ?)
-  `).run(now, sampleId, JSON.stringify({ previousStatus: sample.status }));
+  `).run(now, sampleId, JSON.stringify({ previous_printed: true }));
 
-  res.json({ ok: true, id: sampleId, status: 'expert_review' });
+  res.json({ ok: true, id: sampleId, is_printed: false });
 });
 
 // PATCH /api/samples/:id/readings/:readingId — exclude/include a reading
@@ -758,7 +664,7 @@ router.patch('/:id/readings/:readingId', (req, res) => {
   const db = getDb();
   const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(sampleId);
   if (!sample) return res.status(404).json({ error: 'Sample not found' });
-  if (sample.status === 'report_generated') {
+  if (sample.is_printed) {
     return res.status(409).json({ error: 'Sample is locked after print' });
   }
 
@@ -767,18 +673,17 @@ router.patch('/:id/readings/:readingId', (req, res) => {
   `).run(excluded ? 1 : 0, sampleId, readingId);
 
   calcAutoResults(db, sampleId);
-
   res.json({ ok: true });
 });
 
-// PATCH /api/samples/:id/result — expert sets final values + notes
+// PATCH /api/samples/:id/result — save expert values
 router.patch('/:id/result', (req, res) => {
   const sampleId = toPositiveInt(req.params.id);
   if (!sampleId) {
     return buildValidationError(res, [{ field: 'id', message: 'Sample id must be a positive integer.' }], 'Invalid sample id');
   }
 
-  const { expertValues, notes, deltaMeta } = req.body;
+  const { expertValues, deltaMeta } = req.body;
   const validation = validateExpertValuesPayload(expertValues);
   if (validation.errors.length) {
     return buildValidationError(res, validation.errors, 'Invalid final result payload');
@@ -787,7 +692,7 @@ router.patch('/:id/result', (req, res) => {
   const db = getDb();
   const sample = db.prepare(`SELECT * FROM samples WHERE id = ?`).get(sampleId);
   if (!sample) return res.status(404).json({ error: 'Not found' });
-  if (sample.status === 'report_generated') {
+  if (sample.is_printed) {
     return res.status(409).json({ error: 'Sample is locked' });
   }
 
@@ -813,25 +718,18 @@ router.patch('/:id/result', (req, res) => {
       });
     }
 
-    if (notes !== undefined) {
-      db.prepare(`UPDATE samples SET expert_notes = ? WHERE id = ?`).run(notes, sampleId);
-    }
-
-    db.prepare(`UPDATE samples SET status = 'expert_review', updated_at = ? WHERE id = ?`)
-      .run(now, sampleId);
-
     db.prepare(`UPDATE samples SET updated_at = ? WHERE id = ?`).run(now, sampleId);
 
     db.prepare(`
       INSERT INTO audit_log (occurred_at, sample_id, action, detail_json)
       VALUES (?, ?, 'EXPERT_OVERRIDE', ?)
-    `).run(now, sampleId, JSON.stringify({ expertValues, notes, deltaMeta: deltaMeta || null }));
+    `).run(now, sampleId, JSON.stringify({ expertValues, deltaMeta: deltaMeta || null }));
   })();
 
   res.json({ ok: true });
 });
 
-// POST /api/samples/:id/report — submit direct printer text job (no PDF generation)
+// POST /api/samples/:id/report — print job (or preview)
 router.post('/:id/report', async (req, res) => {
   const sampleId = toPositiveInt(req.params.id);
   if (!sampleId) {
@@ -864,14 +762,14 @@ router.post('/:id/report', async (req, res) => {
       return res.json({ ok: true, previewHtml: buildPreviewHtml(fullSample) });
     }
 
-    // Load branding/settings
+    // Load printer settings
     const settingsPath = path.join(__dirname, '..', '..', 'settings.json');
     let settings = {};
     try {
       if (fs.existsSync(settingsPath)) settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     } catch (_) {}
 
-    const fileName = `${sample.job_ref}-${Date.now()}.txt`;
+    const fileName = `${sample.sr_no}-${Date.now()}.txt`;
     const filePath = path.join(os.tmpdir(), fileName);
     const orderedElements = buildOrderedElements(fullSample);
     const adjustedValues = buildAdjustedValues(fullSample);
@@ -885,9 +783,7 @@ router.post('/:id/report', async (req, res) => {
 
     fs.writeFileSync(filePath, buildPrintJobText(fullSample, adjustedValues, orderedElements), 'utf8');
 
-    // Direct print text job via PowerShell Out-Printer
     const printerName = settings.printerName || '';
-
     const safePath = filePath.replace(/'/g, "''");
     const safePrinter = printerName.replace(/'/g, "''");
     const printCmd = printerName.trim()
@@ -910,7 +806,7 @@ router.post('/:id/report', async (req, res) => {
     const now = new Date().toISOString();
     db.prepare(`INSERT INTO reports (sample_id, generated_at, file_path) VALUES (?, ?, ?)`)
       .run(sampleId, now, `PRINT_JOB:${fileName}`);
-    db.prepare(`UPDATE samples SET status = 'report_generated', updated_at = ? WHERE id = ?`)
+    db.prepare(`UPDATE samples SET is_printed = 1, updated_at = ? WHERE id = ?`)
       .run(now, sampleId);
     db.prepare(`INSERT INTO audit_log (occurred_at, sample_id, action, detail_json) VALUES (?, ?, 'REPORT_GENERATED', ?)`)
       .run(now, sampleId, JSON.stringify({ fileName, printer: printerName || 'default' }));
@@ -922,7 +818,7 @@ router.post('/:id/report', async (req, res) => {
   }
 });
 
-// GET /api/samples/:id/export.csv — download approved results as CSV
+// GET /api/samples/:id/export.csv
 router.get('/:id/export.csv', (req, res) => {
   try {
     const db = getDb();
@@ -944,17 +840,12 @@ router.get('/:id/export.csv', (req, res) => {
     const elementNames = [...new Set(readings.flatMap(r => r.elements.map(e => e.name)))];
 
     const lines = [];
-
-    // Header section
-    lines.push(`Job Ref,${sample.job_ref}`);
+    lines.push(`Sr No,${sample.sr_no}`);
     lines.push(`Customer,${sample.customer_name || ''}`);
     lines.push(`Item,${sample.item_desc || ''}`);
-    lines.push(`Status,${sample.status}`);
-    lines.push(`Approved By,${sample.approved_by || ''}`);
-    lines.push(`Approved At,${sample.approved_at || ''}`);
+    lines.push(`Printed,${sample.is_printed ? 'Yes' : 'No'}`);
     lines.push('');
 
-    // Individual readings
     lines.push(['#', 'Time', 'Status', ...elementNames].join(','));
     for (const r of readings) {
       const row = [
@@ -970,7 +861,6 @@ router.get('/:id/export.csv', (req, res) => {
     }
     lines.push('');
 
-    // Final result row
     lines.push(['Final Result', '', '', ...elementNames].join(','));
     const finalRow = [
       'APPROVED',
@@ -986,7 +876,7 @@ router.get('/:id/export.csv', (req, res) => {
 
     const csv = lines.join('\n');
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${sample.job_ref}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${sample.sr_no}.csv"`);
     res.send(csv);
   } catch (err) {
     console.error('[GET /api/samples/:id/export.csv] Error:', err);
